@@ -1,5 +1,10 @@
 *~
+*.swp
 .DS_Store
 */.DS_Store
-.ipynb_checkpoints/*
+.ipynb_checkpoints/
+set_environment.sh
 __pycache__/*
+*/__pycache__/*
+airflow-logs/*
+data/*
