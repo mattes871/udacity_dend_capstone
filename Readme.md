@@ -2,21 +2,57 @@
 
 ## Defining the Project
 
-Ideation: 
-Weather and Climate are interesting and highly relevant areas for which a lot
-of data is available.  However, in many cases, this data cannot be mapped
-directly onto other datasets that might be of interest.
+Climate and Climate Change have been on the Agenda for more than two decades. A
+lot of discussion has been going on, a lot of research has been conducted. At
+the bottom of it all, however, are data measurements. Basic measurements of
+climate conditions all over the planet: temperature, humidity, precipitation,
+etc.
 
-E.g. ECA&D data from Europe (continent)
-ECA&D is the European Climate Assessment & Dataset project. It presents information on changes in weather and climate extremes, as well as the daily dataset needed to monitor and analyse these extremes.
-Bulk downloads are available at
-https://www.ecad.eu/dailydata/predefinedseries.php and can also be accessed via
-AWS S3 buckets
+In this project, I show how to tap into two of these data sources and how to use
+Airflow to setup a process that collects data from those data sources
+and updates a Postgresql database on a daily basis.
 
-Idea update:
-NOAA data is available via S3 buckets:
-aws s3 ls noaa-ghcn-pds
+The data sources are collected and provided by
+* The European Climate Assessment & Dataset project (ECA&D)
+* and the National Oceanic and Atmospheric Administration (NOAA) of the U.S.
+  Department of Commerce
+
+### ECA&D dataset
+**Scope**: 20,000 stations, 65 countries, European + Mediterranean countries
+**Source platform**: AWS S3 http site
+**File structre**: One file per KPI
+**Format**: .zip text-file with explanatory header
+**Downloads**: https://www.ecad.eu/dailydata/predefinedseries.ph
+
+### NOAA dataset
+**Scope**: 160,000 stations worldwide, partially dating back until 1763
+**Source platform**: AWS S3 bucket
+**File structre**: One file per year, all in the same directory; current year's
+file gets daily updates appended
+**Format**: csv, csv.gz
+**Downloads**: https://docs.opendata.aws/noaa-ghcn-pds/readme.html
+
+Access to the NOAA dataset is also possible via AWS CLI:
+> aws s3 ls noaa-ghcn-pds
+
 See https://docs.opendata.aws/noaa-ghcn-pds/readme.html for more details.
+
+
+All data sources used in this project are publicly available and
+free of charge for educational purposes.
+
+## Scope the Project and Gather Data
+
+Setup a workflow that
+- downloads the most recent data from NOAA onto a Staging area 
+- transforms the data into meaningful entities
+- stores the data in a database
+- performas quality checks on the data
+Further requirements:
+- the workflow should be able to backfill past data and data that was missed due to unavailability of the source data.
+- the solution architecture should allow to easily add new data sources into the
+  workflow
+
 
 Workflow should be:
 - Download from S3 into a Staging Area (e.g. local)
@@ -24,11 +60,6 @@ Workflow should be:
 - Run essential data qualit checks
 - Run a sample analytics use case to showcase the usefulness of the data
 - Use Airflow for orchestrating the workflow
-
-## Scope the Project and Gather Data
-
-Connect to ECA&D S3-bucket and download (a sample) of the datConnect to ECA&D
-S3-bucket and download (a sample) of the dataa
 
 ## Setup the infrastructure
 
@@ -43,7 +74,7 @@ see former projects
 
 I chose Airflow for the management of the workflow. In order to make the code as
 easy to transfer as possible, Airflow and its components (database, scheduler,
-webserver) should run in a docker container.
+webserver) are containerized.
 
 
 ## Explore and Assess the Data

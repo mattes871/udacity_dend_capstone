@@ -41,7 +41,8 @@ dag = DAG('s3_to_postgres_dag',
           default_args = default_args,
           description = 'Load and transform data in Postgresql with Airflow',
           catchup = False,
-          max_active_runs = 1, # to prevent Airflow from running 
+          concurrency = 4,
+          max_active_runs = 4, # to prevent Airflow from running 
                                # multiple days/hours at the same time
           schedule_interval = '@monthly'
         )
