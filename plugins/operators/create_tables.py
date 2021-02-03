@@ -1,4 +1,4 @@
-#from airflow.hooks.postgres_hook import PostgresHook
+from airflow.hooks.postgres_hook import PostgresHook
 from airflow.models import BaseOperator
 from airflow.utils.decorators import apply_defaults
 
@@ -35,9 +35,9 @@ class CreateTablesOperator(BaseOperator):
         with open(self.sql_query_file, mode='r') as f:
             sql_query = f.read()
             # f.close() happens implicitly when exiting with-scope
-        #sql_query = CreateTablesOperator.sql_cmds.format(sql_query)
-        #postgres = PostgresHook(postgres_conn_id=self.postgres_conn_id)
-        #self.log.info(f'Executing CreateTablesOperator with:\n{sql_query}')
-        #postgres.run(sql_query)
+        sql_query = CreateTablesOperator.sql_cmds.format(sql_query)
+        postgres = PostgresHook(postgres_conn_id=self.postgres_conn_id)
+        self.log.info(f'Executing CreateTablesOperator with:\n{sql_query}')
+        postgres.run(sql_query)
         self.log.info(f'Succeeded with CreateTablesOperator from file:\n{self.sql_query_file}')
 

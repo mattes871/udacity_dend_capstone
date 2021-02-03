@@ -15,27 +15,6 @@ services:
     volumes:
       - ./data/postgresql:/var/lib/postgresql
 
-  # airflow_db_init:
-  #   image: apache/airflow:latest
-  #   # build:
-  #   #   context: ..
-  #   #   dockerfile: docker/Dockerfile
-  #   depends_on:
-  #     - postgres
-  #   volumes:
-  #     #- ../airflow.cfg:/usr/local/airflow/airflow.cfg
-  #     - ../variables:/usr/local/airflow/variables
-  #   command:
-  #     - /bin/bash
-  #     - -c
-  #     - |
-  #       airflow db init
-  #       if [[ -e /usr/local/airflow/variables/dev/all.json ]]; then
-  #           airflow variables -i /usr/local/airflow/variables/dev/all.json
-  #       fi
-  #       # Enable this if you choose to have RBAC UI activated in the webserver
-  #       airflow create_user -r admin -u airflow -e airflow@airflow.com -f Air -l Flow -p airflow
-  #
   webserver:
     image: apache/airflow:latest
     hostname: webserver
@@ -45,10 +24,10 @@ services:
     env_file:
       - airflow.env
     volumes:
-      - ./plugins:/opt/airflow/plugins
       - ./dags:/opt/airflow/dags
       - ./scripts:/opt/airflow/scripts
       - ./airflow-logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
       - ./variables:/opt/airflow/variables
     ports:
       - "8080:8080"
