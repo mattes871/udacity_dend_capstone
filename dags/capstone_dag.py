@@ -1,7 +1,9 @@
 from datetime import datetime, timedelta
 import os
 from airflow import DAG
-from airflow.operators.dummy_operator import DummyOperator
+from airflow.operators.dummy import DummyOperator
+from airflow.operators.python import PythonOperator
+from airflow.providers.amazon.aws.hooks.s3 import *
 from operators.create_tables import CreateTablesOperator
 from operators.stage_postgres import StageToPostgresOperator
 from helpers.sql_queries import SqlQueries
@@ -30,60 +32,103 @@ default_args = {
     'region': 'eu-central-1'
 }
 
+
+BUCKET_NAME = os.environ.get('BUCKET_NAME', 'noaa-ghcn-pds')
+
+
+def s3_test_func():
+    """This is a test"""
+    s3_hook = S3Hook('aws_credentials')
+    result = s3_hook.list_keys(
+                bucket_name=BUCKET_NAME,
+                delimiter='/'
+                )
+    print(f'------------------------- load_keys(): {result}')
+    result = s3_hook.list_prefixes(
+                bucket_name=BUCKET_NAME,
+                delimiter='/'
+                )
+    print(f'------------------------- load_prefixes(): {result}')
+    result = s3_hook.select_key(
+              key='csv.gz/1971.csv.gz',
+              bucket_name=BUCKET_NAME,
+              expression="select s._1 as a, s._2 as b, s._3 as c from s3object s where s._2='19710111' limit 5",
+              input_serialization={
+                  'CSV': {
+                         'FileHeaderInfo': 'NONE',
+                         'FieldDelimiter': ','
+                      },
+                  'CompressionType': 'GZIP'
+                  }
+              )
+    print(f'------------------------- select_key(): {result}')
+ 
+    credentials = s3_hook.get_credentials()
+    copy_options = ''
+
+    copy_statement = f"""
+        COPY public.weather_data_raw
+        FROM 's3://{BUCKET_NAME}/csv/1971.csv'
+        with credentials
+        'aws_access_key_id={credentials.access_key};aws_secret_access_key={credentials.secret_key}'
+        {copy_options};
+    """
+    print(f'COPY STATEMENT: \n{copy_statement}')
+
 # The following DAG performs the functions:
 #
-#       1. Load Log- and Song-data from S3 into staging tables on Amazon Postgres
-#       2. Extract facts data from 'staging_events' table into 'songplays' table
-#       3. Extract dimension data from 'songplays', 'staging_songs' and 'staging_events'
-#          into dimension tables 'users', 'songs', 'artists', and 'time'
-#       4. Run data quality checks on facts and dimension tables
-dag = DAG('s3_to_postgres_dag',
+with DAG('climate_datamart_dag',
           default_args = default_args,
-          description = 'Load and transform data in Postgresql with Airflow',
+          description = 'Load climate data and create a regular report',
           catchup = False,
           concurrency = 4,
           max_active_runs = 4, # to prevent Airflow from running 
                                # multiple days/hours at the same time
           schedule_interval = '@monthly'
-        )
+        ) as dag:
 
-start_operator = DummyOperator(task_id='Begin_execution',  
-                               dag=dag)
-
-#
-# Create all necessary tables on Postgres 
-#
-create_tables_on_postgres = CreateTablesOperator(
-    task_id = 'Create_tables_on_postgres',
-    dag = dag,
-    postgres_conn_id = 'postgres',
-    sql_query_file = postgres_create_tables_file
-)
-
-#
-# Load eventsdata from S3 to Postgresql machine.
-#
-stage_data_to_postgres = StageToPostgresOperator(
-    task_id = 'Stage_weather_data',
-    dag = dag,
-    postgres_conn_id = 'postgres',
-    aws_credentials_id = 'aws_credentials',
-    table = 'weather_data_raw',
-    s3_bucket = 'noaa-ghcn-pds',
-    s3_key = f'csv.gz/2021.csv.gz',
-    ## example of 's3_key' with execution_date info:
-    ## s3_key = 'log_data/{{ execution_date.year }}/{{ execution_date.month }}/{{ ds }}',
-    region = AWS_REGION,
-    delimiter = csv_delimiter,
-    truncate_table = True           # prevent staging table from growing with every run
-)
-
-end_operator = DummyOperator(task_id='Stop_execution',
-                             dag=dag)
+    start_operator = DummyOperator(task_id='Begin_execution')
 
 
+    #
+    # Create necessary tables on Postgres
+    #
+    create_tables_on_postgres = CreateTablesOperator(
+        task_id = 'Create_tables_on_postgres',
+        dag = dag,
+        postgres_conn_id = 'postgres',
+        sql_query_file = postgres_create_tables_file
+    )
 
+    #
+    # Test Connection to AWS S3
+    #
+    s3_test_operator = PythonOperator(
+        task_id='test_s3_functionality', python_callable=s3_test_func
+    )
 
+    #  #
+    #  # Load S3 data to Postgresql machine.
+    #  #
+    #  stage_data_to_postgres = StageToPostgresOperator(
+    #      task_id = 'Stage_weather_data',
+    #      dag = dag,
+    #      postgres_conn_id = 'postgres',
+    #      aws_credentials_id = 'aws_credentials',
+    #      table = 'weather_data_raw',
+    #      s3_bucket = 'noaa-ghcn-pds',
+    #      s3_key = f'csv.gz/2021.csv.gz',
+    #      ## example of 's3_key' with execution_date info:
+    #      ## s3_key = 'log_data/{{ execution_date.year }}/{{ execution_date.month }}/{{ ds }}',
+    #      region = AWS_REGION,
+    #      delimiter = csv_delimiter,
+    #      truncate_table = True           # prevent staging table from growing with every run
+    #  )
+    #
+    end_operator = DummyOperator(task_id='Stop_execution')
+
+    # start_operator >> create_tables_on_postgres >> stage_data_to_postgres >> end_operator
+    start_operator >> create_tables_on_postgres >> s3_test_operator >> end_operator
 
 
 #  #
@@ -172,7 +217,6 @@ end_operator = DummyOperator(task_id='Stop_execution',
 #
 
 
-start_operator >> create_tables_on_postgres >> stage_data_to_postgres >> end_operator
 
 #  start_operator >> create_tables_on_redshift
 #  create_tables_on_redshift >> [stage_events_to_redshift, stage_songs_to_redshift]
