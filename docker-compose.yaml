@@ -24,6 +24,7 @@ services:
     env_file:
       - airflow.env
     volumes:
+      - ./data:/opt/airflow/data
       - ./dags:/opt/airflow/dags
       - ./scripts:/opt/airflow/scripts
       - ./airflow-logs:/opt/airflow/logs

@@ -43,7 +43,10 @@ if [[ -e /usr/local/airflow/variables/all.json ]]; then
 fi
 echo "Checking for connections to add to Airflow"
 
-#/usr/local/bin/python -m pip install --upgrade pip
+/usr/local/bin/python -m pip install --upgrade pip
+## Install dataclass backport for Python 3.6
+pip install dataclasses
+
 #pip install opentelemetry-api \
 #            opentelemetry-instrumentation
 #

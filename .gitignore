@@ -6,5 +6,6 @@
 set_environment.sh
 __pycache__/*
 */__pycache__/*
-airflow-logs/*
+**/__pycache__/
+*airflow-logs/*
 data/*

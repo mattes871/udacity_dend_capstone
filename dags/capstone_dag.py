@@ -2,21 +2,53 @@ from datetime import datetime, timedelta
 import os
 from airflow import DAG
 from airflow.operators.dummy import DummyOperator
-from airflow.operators.python import PythonOperator
-from airflow.providers.amazon.aws.hooks.s3 import *
+#from airflow.operators.python import PythonOperator
+#from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+
 from operators.create_tables import CreateTablesOperator
 from operators.stage_postgres import StageToPostgresOperator
-from helpers.sql_queries import SqlQueries
+from operators.copy_s3_files_to_staging import CopyS3FilesToStagingOperator
 
+from helpers.sql_queries import SqlQueries
+from helpers.source_data_class import SourceDataClass
 
 AWS_KEY    = os.environ.get('AWS_KEY')
 AWS_SECRET = os.environ.get('AWS_SECRET')
 AWS_REGION = os.environ.get('AWS_REGION', default='eu-central-1')
 
-print(f'Key, Secret, Region: {AWS_KEY} {AWS_SECRET} {AWS_REGION}')
+#  BUCKET_NAME = os.environ.get('BUCKET_NAME', 'noaa-ghcn-pds')
 
-#start_date = datetime.utcnow()
-#  json_paths_bucket = 's3://udacity-8fnmyev4xc5y-jsonpaths/jsonpaths.json'
+test = SourceDataClass(source_name='x', description='xxxx',
+                        source_type='s3',
+                        source_params={'h':'xxxx'},
+                        target_dir='', version='')
+
+noaa = SourceDataClass(
+    source_name='noaa',
+    description="""Climate KPIs from 200k stations worldwide, dating back as far
+    as 1763""",
+    source_type='amazon s3',
+    source_params={
+        'aws_credentials': 'aws_credentials',
+        's3_bucket': 'noaa-ghcn-pds',
+        'files':  ['by-year-status.txt',
+                   'ghcn-daily-by_year-format.rtf',
+                   #  'ghcnd-countries.txt',
+                   #  'ghcnd-inventory.txt',
+                   #  'ghcnd-states.txt',
+                   #  'ghcnd-stations.txt',
+                   #  'ghcnd-version.txt',
+                   #  'index.html',
+                   #  'mingle-list.txt',
+                   'readme.txt',
+                   'status.txt'],
+        'prefixes': ['csv','csv.gz'],
+        'fact_format': 'csv',
+        'compression': 'gzip',
+        'delim':       ','},
+    target_dir='./data/staging_files/noaa',
+    version='v2021-02-05')
+
 
 postgres_create_tables_file = './plugins/helpers/create_tables.sql'
 csv_delimiter = ','
@@ -33,47 +65,46 @@ default_args = {
 }
 
 
-BUCKET_NAME = os.environ.get('BUCKET_NAME', 'noaa-ghcn-pds')
 
-
-def s3_test_func():
-    """This is a test"""
-    s3_hook = S3Hook('aws_credentials')
-    result = s3_hook.list_keys(
-                bucket_name=BUCKET_NAME,
-                delimiter='/'
-                )
-    print(f'------------------------- load_keys(): {result}')
-    result = s3_hook.list_prefixes(
-                bucket_name=BUCKET_NAME,
-                delimiter='/'
-                )
-    print(f'------------------------- load_prefixes(): {result}')
-    result = s3_hook.select_key(
-              key='csv.gz/1971.csv.gz',
-              bucket_name=BUCKET_NAME,
-              expression="select s._1 as a, s._2 as b, s._3 as c from s3object s where s._2='19710111' limit 5",
-              input_serialization={
-                  'CSV': {
-                         'FileHeaderInfo': 'NONE',
-                         'FieldDelimiter': ','
-                      },
-                  'CompressionType': 'GZIP'
-                  }
-              )
-    print(f'------------------------- select_key(): {result}')
- 
-    credentials = s3_hook.get_credentials()
-    copy_options = ''
-
-    copy_statement = f"""
-        COPY public.weather_data_raw
-        FROM 's3://{BUCKET_NAME}/csv/1971.csv'
-        with credentials
-        'aws_access_key_id={credentials.access_key};aws_secret_access_key={credentials.secret_key}'
-        {copy_options};
-    """
-    print(f'COPY STATEMENT: \n{copy_statement}')
+#
+#  def s3_test_func():
+#      """This is a test"""
+#      s3_hook = S3Hook('aws_credentials')
+#      result = s3_hook.list_keys(
+#                  bucket_name=BUCKET_NAME,
+#                  delimiter='/'
+#                  )
+#      print(f'------------------------- load_keys(): {result}')
+#      result = s3_hook.list_prefixes(
+#                  bucket_name=BUCKET_NAME,
+#                  delimiter='/'
+#                  )
+#      print(f'------------------------- load_prefixes(): {result}')
+#      result = s3_hook.select_key(
+#                key='csv.gz/1971.csv.gz',
+#                bucket_name=BUCKET_NAME,
+#                expression="select s._1 as a, s._2 as b, s._3 as c from s3object s where s._2='19710111' limit 5",
+#                input_serialization={
+#                    'CSV': {
+#                           'FileHeaderInfo': 'NONE',
+#                           'FieldDelimiter': ','
+#                        },
+#                    'CompressionType': 'GZIP'
+#                    }
+#                )
+#      print(f'------------------------- select_key(): {result}')
+#
+#      credentials = s3_hook.get_credentials()
+#      copy_options = ''
+#
+#      copy_statement = f"""
+#          COPY public.weather_data_raw
+#          FROM 's3://{BUCKET_NAME}/csv/1971.csv'
+#          with credentials
+#          'aws_access_key_id={credentials.access_key};aws_secret_access_key={credentials.secret_key}'
+#          {copy_options};
+#      """
+#      print(f'COPY STATEMENT: \n{copy_statement}')
 
 # The following DAG performs the functions:
 #
@@ -89,23 +120,31 @@ with DAG('climate_datamart_dag',
 
     start_operator = DummyOperator(task_id='Begin_execution')
 
+    load_noaa_files_operator = CopyS3FilesToStagingOperator(
+        task_id='Load_noaa_status_file',
+        aws_credentials=noaa.source_params['aws_credentials'],
+        s3_bucket=noaa.source_params['s3_bucket'],
+        s3_prefix='', 
+        s3_files=noaa.source_params['files'],
+        staging_location=noaa.target_dir
+        ) 
 
-    #
-    # Create necessary tables on Postgres
-    #
-    create_tables_on_postgres = CreateTablesOperator(
-        task_id = 'Create_tables_on_postgres',
-        dag = dag,
-        postgres_conn_id = 'postgres',
-        sql_query_file = postgres_create_tables_file
-    )
+    #  #
+    #  # Create necessary tables on Postgres
+    #  #
+    #  create_tables_on_postgres = CreateTablesOperator(
+    #      task_id = 'Create_tables_on_postgres',
+    #      dag = dag,
+    #      postgres_conn_id = 'postgres',
+    #      sql_query_file = postgres_create_tables_file
+    #  )
 
-    #
-    # Test Connection to AWS S3
-    #
-    s3_test_operator = PythonOperator(
-        task_id='test_s3_functionality', python_callable=s3_test_func
-    )
+    #  #
+    #  # Test Connection to AWS S3
+    #  #
+    #  s3_test_operator = PythonOperator(
+    #      task_id='test_s3_functionality', python_callable=s3_test_func
+    #  )
 
     #  #
     #  # Load S3 data to Postgresql machine.
@@ -128,7 +167,7 @@ with DAG('climate_datamart_dag',
     end_operator = DummyOperator(task_id='Stop_execution')
 
     # start_operator >> create_tables_on_postgres >> stage_data_to_postgres >> end_operator
-    start_operator >> create_tables_on_postgres >> s3_test_operator >> end_operator
+    start_operator >> load_noaa_files_operator  >> end_operator
 
 
 #  #
