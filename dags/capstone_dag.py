@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import os
 from airflow import DAG
 from airflow.operators.dummy import DummyOperator
@@ -7,6 +7,7 @@ from airflow.operators.dummy import DummyOperator
 
 from operators.create_tables import CreateTablesOperator
 from operators.stage_postgres import StageToPostgresOperator
+from operators.select_from_s3_to_staging import SelectFromS3ToStagingOperator
 from operators.copy_s3_files_to_staging import CopyS3FilesToStagingOperator
 
 from helpers.sql_queries import SqlQueries
@@ -16,12 +17,6 @@ AWS_KEY    = os.environ.get('AWS_KEY')
 AWS_SECRET = os.environ.get('AWS_SECRET')
 AWS_REGION = os.environ.get('AWS_REGION', default='eu-central-1')
 
-#  BUCKET_NAME = os.environ.get('BUCKET_NAME', 'noaa-ghcn-pds')
-
-test = SourceDataClass(source_name='x', description='xxxx',
-                        source_type='s3',
-                        source_params={'h':'xxxx'},
-                        target_dir='', version='')
 
 noaa = SourceDataClass(
     source_name='noaa',
@@ -108,6 +103,9 @@ default_args = {
 
 # The following DAG performs the functions:
 #
+
+
+
 with DAG('climate_datamart_dag',
           default_args = default_args,
           description = 'Load climate data and create a regular report',
@@ -120,54 +118,81 @@ with DAG('climate_datamart_dag',
 
     start_operator = DummyOperator(task_id='Begin_execution')
 
-    load_noaa_files_operator = CopyS3FilesToStagingOperator(
-        task_id='Load_noaa_status_file',
+    # Create NOAA tables in Staging Database (Postgresql)
+    #
+    create_noaa_tables_operator = DummyOperator(task_id='Create_noaa_tables')
+
+    # >>>>> Make sure that dim- and doc-files are loaded only once
+    # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    #
+    # Load relevant dimension and documentation files from the
+    # NOAA S3 bucket into the local Staging Area (Filesystem)
+    #
+    copy_noaa_s3_files_to_staging_operator = CopyS3FilesToStagingOperator(
+        task_id='Copy_noaa_s3_files_to_staging',
         aws_credentials=noaa.source_params['aws_credentials'],
         s3_bucket=noaa.source_params['s3_bucket'],
         s3_prefix='', 
         s3_files=noaa.source_params['files'],
         staging_location=noaa.target_dir
-        ) 
+        )
 
-    #  #
-    #  # Create necessary tables on Postgres
-    #  #
-    #  create_tables_on_postgres = CreateTablesOperator(
-    #      task_id = 'Create_tables_on_postgres',
-    #      dag = dag,
-    #      postgres_conn_id = 'postgres',
-    #      sql_query_file = postgres_create_tables_file
-    #  )
-
-    #  #
-    #  # Test Connection to AWS S3
-    #  #
-    #  s3_test_operator = PythonOperator(
-    #      task_id='test_s3_functionality', python_callable=s3_test_func
-    #  )
-
-    #  #
-    #  # Load S3 data to Postgresql machine.
-    #  #
-    #  stage_data_to_postgres = StageToPostgresOperator(
-    #      task_id = 'Stage_weather_data',
-    #      dag = dag,
-    #      postgres_conn_id = 'postgres',
-    #      aws_credentials_id = 'aws_credentials',
-    #      table = 'weather_data_raw',
-    #      s3_bucket = 'noaa-ghcn-pds',
-    #      s3_key = f'csv.gz/2021.csv.gz',
-    #      ## example of 's3_key' with execution_date info:
-    #      ## s3_key = 'log_data/{{ execution_date.year }}/{{ execution_date.month }}/{{ ds }}',
-    #      region = AWS_REGION,
-    #      delimiter = csv_delimiter,
-    #      truncate_table = True           # prevent staging table from growing with every run
-    #  )
+    # In case it changed, load the NOAA dimension from csv file on 
+    # local Staging into the tables prepared on Staging Database (Postgresql)
     #
+    load_noaa_dim_tables_into_postgres_operator = \
+            DummyOperator(task_id='Load_noaa_dim_tables_into_postgres')
+
+    # Run quality checks on dimension data
+    #
+    check_dim_quality_operator = DummyOperator(task_id='Check_dim_quality')
+
+
+    # Select all facts for date = {{ DS }} from the NOAA S3 bucket
+    # and store them as a csv file in the local Staging Area (Filesystem)
+    #
+    select_noaa_data_from_s3_operator = SelectFromS3ToStagingOperator(
+        task_id='Select_noaa_data_from_s3',
+        aws_credentials=noaa.source_params['aws_credentials'],
+        s3_bucket=noaa.source_params['s3_bucket'],
+        s3_prefix='csv.gz',
+        s3_table_file=noaa.source_params['files'],
+        execution_date_str=f'{{ ds }}',
+        real_date_str=date.today().strftime("%Y-%m-%d"),
+        staging_location=noaa.target_dir
+        )
+
+    # Load the NOAA fact data for {{ DS }} from csv file on local Staging
+    # into the tables prepared on Staging Database (Postgresql)
+    #
+    load_noaa_fact_tables_into_postgres_operator = \
+            DummyOperator(task_id='Load_noaa_fact_tables_into_postgres')
+
+    # Run quality checks on fact data
+    #
+    check_fact_quality_operator = DummyOperator(task_id='Check_fact_quality')
+
     end_operator = DummyOperator(task_id='Stop_execution')
 
-    # start_operator >> create_tables_on_postgres >> stage_data_to_postgres >> end_operator
-    start_operator >> load_noaa_files_operator  >> end_operator
+
+# ............................................
+# Defining the DAG
+# ............................................
+
+start_operator >> create_noaa_tables_operator
+
+create_noaa_tables_operator >> copy_noaa_s3_files_to_staging_operator
+copy_noaa_s3_files_to_staging_operator >> load_noaa_dim_tables_into_postgres_operator
+load_noaa_dim_tables_into_postgres_operator >> check_dim_quality_operator
+check_dim_quality_operator >> end_operator
+
+create_noaa_tables_operator >> select_noaa_data_from_s3_operator
+select_noaa_data_from_s3_operator >> load_noaa_fact_tables_into_postgres_operator
+load_noaa_fact_tables_into_postgres_operator >> check_fact_quality_operator
+check_fact_quality_operator >> end_operator
+
+
+
 
 
 #  #
