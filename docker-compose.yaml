@@ -24,7 +24,7 @@ services:
     env_file:
       - airflow.env
     volumes:
-      - ./data:/opt/airflow/data
+      - ./staging_files:/opt/airflow/staging_files
       - ./dags:/opt/airflow/dags
       - ./scripts:/opt/airflow/scripts
       - ./airflow-logs:/opt/airflow/logs
@@ -32,8 +32,8 @@ services:
       - ./variables:/opt/airflow/variables
     ports:
       - "8080:8080"
-    command: 'bash -c "airflow db init &&  airflow users create --username admin  --firstname Air --lastname Flow --role Admin --email airflow@airflow.com -p admin && airflow webserver -D && airflow scheduler -D"'
-    # entrypoint: ./scripts/airflow-entrypoint.sh
+    # command: 'bash -c "airflow db init &&  airflow users create --username admin  --firstname Air --lastname Flow --role Admin --email airflow@airflow.com -p admin && airflow webserver -D && airflow scheduler -D"'
+    entrypoint: ./scripts/airflow-entrypoint.sh
     healthcheck:
       test: ["CMD-SHELL", "[ -f /usr/local/airflow/airflow-webserver.pid ]"]
       interval: 30s

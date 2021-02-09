@@ -41,7 +41,7 @@ noaa = SourceDataClass(
         'fact_format': 'csv',
         'compression': 'gzip',
         'delim':       ','},
-    target_dir='./data/staging_files/noaa',
+    target_dir='./staging_files/noaa',
     version='v2021-02-05')
 
 
@@ -52,10 +52,10 @@ default_args = {
     'owner': 'matkir',
     'depends_on_past': False,
     'retries': 3,
-    'catchup': False,
+    'catchup': True, #False,
     'retry_delay': timedelta(minutes=5),
     'email_on_retry': False,
-    'start_date': datetime(2019,1,12),
+    'start_date': datetime(year=2021,month=1,day=31),
     'region': 'eu-central-1'
 }
 
@@ -109,12 +109,15 @@ default_args = {
 with DAG('climate_datamart_dag',
           default_args = default_args,
           description = 'Load climate data and create a regular report',
-          catchup = False,
+          catchup = True, #False,
+          start_date = datetime(year=2021,month=1,day=31)
           concurrency = 4,
           max_active_runs = 4, # to prevent Airflow from running 
                                # multiple days/hours at the same time
-          schedule_interval = '@monthly'
+          schedule_interval = '@daily'
         ) as dag:
+
+    execution_date_str = "{{ ds_nodash }}"
 
     start_operator = DummyOperator(task_id='Begin_execution')
 
@@ -156,8 +159,8 @@ with DAG('climate_datamart_dag',
         aws_credentials=noaa.source_params['aws_credentials'],
         s3_bucket=noaa.source_params['s3_bucket'],
         s3_prefix='csv.gz',
-        s3_table_file=noaa.source_params['files'],
-        execution_date_str=f'{{ ds }}',
+        s3_table_file='{{ execution_date.year }}.csv.gz',
+        execution_date_str=execution_date_str,
         real_date_str=date.today().strftime("%Y-%m-%d"),
         staging_location=noaa.target_dir
         )

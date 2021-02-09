@@ -19,5 +19,8 @@ if [[ -e /usr/local/airflow/variables/all.json ]]; then
 fi
 echo "Checking for connections to add to Airflow"
 
-airflow webserver -D && airflow scheduler -D
+airflow webserver -D 
+
+echo "Yessss"
+# -D && airflow scheduler -D
 

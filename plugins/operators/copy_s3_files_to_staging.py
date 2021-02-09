@@ -60,12 +60,15 @@ class CopyS3FilesToStagingOperator(BaseOperator):
 
         self.log.info(f'Executing CopyS3FilesToStagingOperator ...')
         s3_hook = S3Hook(self.aws_credentials)
+        # whoami?
+        self.log.info(f'Staging Location: {os.path.join(self.staging_location,self.s3_prefix)} ------------------')
         # Make sure path for local staging exists
         if not os.path.exists(self.staging_location):
             os.makedirs(os.path.join(self.staging_location,self.s3_prefix))
 
         for s3_file in self.s3_files:
-            download_file(s3_file)
+            #download_file(s3_file)
+            self.log.info(f'REMOVE COMMENT ... should download: {s3_file}')
 
         #  # Check if file already exists and rename with timestamp-suffix
         #  full_filename = os.path.join(self.staging_location, self.s3_file)
