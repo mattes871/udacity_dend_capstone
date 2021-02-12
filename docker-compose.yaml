@@ -14,6 +14,7 @@ services:
       - "5433:5432"
     volumes:
       - ./data/postgresql:/var/lib/postgresql
+      - ./staging_files:/var/lib/postgresql/staging_files
 
   webserver:
     image: apache/airflow:latest

@@ -6,7 +6,6 @@ class SourceDataClass:
     description: str
     source_type: str       # e.g. amazon s3
     source_params: dict    # e.g. bucket and key names, aws_credentials
-    target_dir: str
+    staging_location: str
     version: str
-
 

@@ -2,13 +2,15 @@ from datetime import date, datetime, timedelta
 import os
 from airflow import DAG
 from airflow.operators.dummy import DummyOperator
-#from airflow.operators.python import PythonOperator
+from airflow.operators.python import PythonOperator
 #from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+from airflow.hooks.postgres_hook import PostgresHook
+
 
 from operators.create_tables import CreateTablesOperator
-from operators.stage_postgres import StageToPostgresOperator
-from operators.select_from_s3_to_staging import SelectFromS3ToStagingOperator
-from operators.copy_s3_files_to_staging import CopyS3FilesToStagingOperator
+from operators.local_stage_to_postgres import LocalStageToPostgresOperator
+from operators.select_from_noaa_s3_to_staging import SelectFromNOAAS3ToStagingOperator
+from operators.copy_noaa_s3_files_to_staging import CopyNOAAS3FilesToStagingOperator
 
 from helpers.sql_queries import SqlQueries
 from helpers.source_data_class import SourceDataClass
@@ -17,6 +19,9 @@ AWS_KEY    = os.environ.get('AWS_KEY')
 AWS_SECRET = os.environ.get('AWS_SECRET')
 AWS_REGION = os.environ.get('AWS_REGION', default='eu-central-1')
 
+## Set TEST_RUN = True to reduce download size by disabling
+## the download of dimension tables and docu files
+TEST_RUN = True
 
 noaa = SourceDataClass(
     source_name='noaa',
@@ -41,10 +46,14 @@ noaa = SourceDataClass(
         'fact_format': 'csv',
         'compression': 'gzip',
         'delim':       ','},
-    target_dir='./staging_files/noaa',
+    staging_location='./staging_files/noaa',
     version='v2021-02-05')
 
+default_start_date = datetime(year=2021,month=1,day=31)
 
+most_recent_noaa_data = '19000101'
+
+postgres_conn_id = 'postgres'
 postgres_create_tables_file = './plugins/helpers/create_tables.sql'
 csv_delimiter = ','
 
@@ -52,15 +61,25 @@ default_args = {
     'owner': 'matkir',
     'depends_on_past': False,
     'retries': 3,
-    'catchup': True, #False,
+    'catchup': False,
     'retry_delay': timedelta(minutes=5),
     'email_on_retry': False,
-    'start_date': datetime(year=2021,month=1,day=31),
-    'region': 'eu-central-1'
+    'start_date': default_start_date,
+    'region': AWS_REGION
 }
 
-
-
+def get_date_of_most_recent_staging_facts():
+    """ Get the date of the most recent fact in
+        the public.weather_data_raw data from postgres
+    """
+    global most_recent_noaa_data
+    sql_cmd = """SELECT max(date_) FROM public.weather_data_raw"""
+    postgres_hook = PostgresHook(postgres_conn_id=postgres_conn_id)
+    most_recent = postgres_hook.run(sql_cmd)
+    if most_recent is not None:
+        most_recent_noaa_data = most_recent
+    else:
+        most_recent_noaa_data = '19000101'
 #
 #  def s3_test_func():
 #      """This is a test"""
@@ -109,8 +128,8 @@ default_args = {
 with DAG('climate_datamart_dag',
           default_args = default_args,
           description = 'Load climate data and create a regular report',
-          catchup = True, #False,
-          start_date = datetime(year=2021,month=1,day=31)
+          catchup = False,
+          start_date = datetime(year=2021,month=1,day=31),
           concurrency = 4,
           max_active_runs = 4, # to prevent Airflow from running 
                                # multiple days/hours at the same time
@@ -123,7 +142,11 @@ with DAG('climate_datamart_dag',
 
     # Create NOAA tables in Staging Database (Postgresql)
     #
-    create_noaa_tables_operator = DummyOperator(task_id='Create_noaa_tables')
+    create_noaa_tables_operator = CreateTablesOperator(
+        task_id='Create_noaa_tables',
+        postgres_conn_id=postgres_conn_id,
+        sql_query_file=postgres_create_tables_file
+        )
 
     # >>>>> Make sure that dim- and doc-files are loaded only once
     # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -131,45 +154,69 @@ with DAG('climate_datamart_dag',
     # Load relevant dimension and documentation files from the
     # NOAA S3 bucket into the local Staging Area (Filesystem)
     #
-    copy_noaa_s3_files_to_staging_operator = CopyS3FilesToStagingOperator(
+    copy_noaa_s3_files_to_staging_operator = CopyNOAAS3FilesToStagingOperator(
         task_id='Copy_noaa_s3_files_to_staging',
         aws_credentials=noaa.source_params['aws_credentials'],
         s3_bucket=noaa.source_params['s3_bucket'],
         s3_prefix='', 
         s3_files=noaa.source_params['files'],
-        staging_location=noaa.target_dir
+        staging_location=os.path.join(noaa.staging_location,'dimensions'),
+        test_run=TEST_RUN
         )
 
-    # In case it changed, load the NOAA dimension from csv file on 
+    # In case the data changed, load the NOAA dimension data from csv file on
     # local Staging into the tables prepared on Staging Database (Postgresql)
     #
-    load_noaa_dim_tables_into_postgres_operator = \
-            DummyOperator(task_id='Load_noaa_dim_tables_into_postgres')
+    load_noaa_dim_tables_into_postgres_operator = DummyOperator(
+        task_id='Load_noaa_dim_tables_into_postgres')
+        #  LocalStageToPostgresOperator(
+        #  task_id='Load_noaa_dim_tables_into_postgres',
+        #  postgres_conn_id=postgres_conn_id,
+        #  table='public.weather_data_raw',
+        #  delimiter=',',
+        #  truncate_table=True,
+        #  local_path=os.path.join(noaa.staging_location,'facts'),
+        #  )
 
     # Run quality checks on dimension data
     #
     check_dim_quality_operator = DummyOperator(task_id='Check_dim_quality')
 
+    # Get date of most recent NOAA data in the Postgres staging tables
+    #
+    get_date_of_most_recent_noaa_facts_operator = PythonOperator(
+        task_id='Get_date_of_most_recent_noaa_facts',
+        python_callable=get_date_of_most_recent_staging_facts
+        )
 
     # Select all facts for date = {{ DS }} from the NOAA S3 bucket
     # and store them as a csv file in the local Staging Area (Filesystem)
     #
-    select_noaa_data_from_s3_operator = SelectFromS3ToStagingOperator(
+    select_noaa_data_from_s3_operator = SelectFromNOAAS3ToStagingOperator(
         task_id='Select_noaa_data_from_s3',
         aws_credentials=noaa.source_params['aws_credentials'],
         s3_bucket=noaa.source_params['s3_bucket'],
         s3_prefix='csv.gz',
         s3_table_file='{{ execution_date.year }}.csv.gz',
+        most_recent_data_date_str=most_recent_noaa_data,
         execution_date_str=execution_date_str,
         real_date_str=date.today().strftime("%Y-%m-%d"),
-        staging_location=noaa.target_dir
+        local_path=os.path.join(noaa.staging_location,'facts'),
+        test_run=TEST_RUN
         )
 
     # Load the NOAA fact data for {{ DS }} from csv file on local Staging
     # into the tables prepared on Staging Database (Postgresql)
     #
-    load_noaa_fact_tables_into_postgres_operator = \
-            DummyOperator(task_id='Load_noaa_fact_tables_into_postgres')
+    load_noaa_fact_tables_into_postgres_operator = LocalStageToPostgresOperator(
+        task_id='Load_noaa_fact_tables_into_postgres',
+        postgres_conn_id=postgres_conn_id,
+        table='public.weather_data_raw',
+        delimiter=',',
+        truncate_table=True,
+        local_path=os.path.join(noaa.staging_location,'facts'),
+        )
+
 
     # Run quality checks on fact data
     #
@@ -189,7 +236,8 @@ copy_noaa_s3_files_to_staging_operator >> load_noaa_dim_tables_into_postgres_ope
 load_noaa_dim_tables_into_postgres_operator >> check_dim_quality_operator
 check_dim_quality_operator >> end_operator
 
-create_noaa_tables_operator >> select_noaa_data_from_s3_operator
+create_noaa_tables_operator >> get_date_of_most_recent_noaa_facts_operator
+get_date_of_most_recent_noaa_facts_operator >> select_noaa_data_from_s3_operator
 select_noaa_data_from_s3_operator >> load_noaa_fact_tables_into_postgres_operator
 load_noaa_fact_tables_into_postgres_operator >> check_fact_quality_operator
 check_fact_quality_operator >> end_operator
