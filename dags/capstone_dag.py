@@ -4,8 +4,10 @@ from airflow import DAG
 from airflow.operators.dummy import DummyOperator
 from airflow.operators.python import PythonOperator
 #from airflow.providers.amazon.aws.hooks.s3 import S3Hook
-from airflow.hooks.postgres_hook import PostgresHook
+from airflow.providers.postgres.operators.postgres import PostgresOperator
+from airflow.providers.postgres.hooks.postgres import PostgresHook
 
+from airflow.models import Variable
 
 from operators.create_tables import CreateTablesOperator
 from operators.local_stage_to_postgres import LocalStageToPostgresOperator
@@ -25,8 +27,8 @@ TEST_RUN = True
 
 noaa = SourceDataClass(
     source_name='noaa',
-    description="""Climate KPIs from 200k stations worldwide, dating back as far
-    as 1763""",
+    description="""Climate KPIs from 200k stations worldwide, 
+                    dating back as far as 1763""",
     source_type='amazon s3',
     source_params={
         'aws_credentials': 'aws_credentials',
@@ -46,12 +48,16 @@ noaa = SourceDataClass(
         'fact_format': 'csv',
         'compression': 'gzip',
         'delim':       ','},
+    data_available_from=date(year=2019,month=1,day=1),
     staging_location='./staging_files/noaa',
     version='v2021-02-05')
 
-default_start_date = datetime(year=2021,month=1,day=31)
+# Variable needs to be defined here so that
+# it can be found by the Airflow engine when initializig the DAG
+Variable.delete('most_recent_noaa_data)'
+Variable.set('most_recent_noaa_data', noaa.data_available_from.strftime('%Y%m%d'))
 
-most_recent_noaa_data = '19000101'
+default_start_date = datetime(year=2021,month=1,day=31)
 
 postgres_conn_id = 'postgres'
 postgres_create_tables_file = './plugins/helpers/create_tables.sql'
@@ -68,18 +74,30 @@ default_args = {
     'region': AWS_REGION
 }
 
-def get_date_of_most_recent_staging_facts():
+def get_date_of_most_recent_noaa_facts() -> None :
     """ Get the date of the most recent fact in
         the public.weather_data_raw data from postgres
+        Set *most_recent_noaa_data* variable in airflow
     """
-    global most_recent_noaa_data
-    sql_cmd = """SELECT max(date_) FROM public.weather_data_raw"""
-    postgres_hook = PostgresHook(postgres_conn_id=postgres_conn_id)
-    most_recent = postgres_hook.run(sql_cmd)
-    if most_recent is not None:
-        most_recent_noaa_data = most_recent
+
+    sql_cmd = f"""SELECT max(date_) as max_date FROM public.weather_data_raw"""
+    postgres = PostgresHook(postgres_conn_id)
+    connection = postgres.get_conn()
+    cursor = connection.cursor()
+    cursor.execute(sql_cmd)
+    most_recent = cursor.fetchone()
+    try:
+        most_recent_day = datetime.strptime(most_recent[0],'%Y%m%d')
+    except:
+        most_recent_day = noaa.data_available_from
     else:
-        most_recent_noaa_data = '19000101'
+        # Add one day to avoid complications with
+        # Dec 31st dates
+        most_recent_day += timedelta(days=1)
+    print(f'Most recent NOAA data is as of: {most_recent_day}')
+    Variable.delete('most_recent_noaa_data')
+    Variable.set('most_recent_noaa_data', most_recent_day.strftime('%Y%m%d'))
+
 #
 #  def s3_test_func():
 #      """This is a test"""
@@ -136,7 +154,7 @@ with DAG('climate_datamart_dag',
           schedule_interval = '@daily'
         ) as dag:
 
-    execution_date_str = "{{ ds_nodash }}"
+    execution_date = "{{ ds_nodash }}"
 
     start_operator = DummyOperator(task_id='Begin_execution')
 
@@ -160,8 +178,8 @@ with DAG('climate_datamart_dag',
         s3_bucket=noaa.source_params['s3_bucket'],
         s3_prefix='', 
         s3_files=noaa.source_params['files'],
-        staging_location=os.path.join(noaa.staging_location,'dimensions'),
-        test_run=TEST_RUN
+        replace_existing=True,
+        local_path=os.path.join(noaa.staging_location,'dimensions')
         )
 
     # In case the data changed, load the NOAA dimension data from csv file on
@@ -186,9 +204,9 @@ with DAG('climate_datamart_dag',
     #
     get_date_of_most_recent_noaa_facts_operator = PythonOperator(
         task_id='Get_date_of_most_recent_noaa_facts',
-        python_callable=get_date_of_most_recent_staging_facts
+        python_callable=get_date_of_most_recent_noaa_facts
         )
-
+    
     # Select all facts for date = {{ DS }} from the NOAA S3 bucket
     # and store them as a csv file in the local Staging Area (Filesystem)
     #
@@ -198,11 +216,10 @@ with DAG('climate_datamart_dag',
         s3_bucket=noaa.source_params['s3_bucket'],
         s3_prefix='csv.gz',
         s3_table_file='{{ execution_date.year }}.csv.gz',
-        most_recent_data_date_str=most_recent_noaa_data,
-        execution_date_str=execution_date_str,
-        real_date_str=date.today().strftime("%Y-%m-%d"),
-        local_path=os.path.join(noaa.staging_location,'facts'),
-        test_run=TEST_RUN
+        most_recent_data_date='{{ var.value.most_recent_noaa_data }}',
+        execution_date='{{ ds_nodash }}',
+        real_date=date.today().strftime('%Y%m%d'),
+        local_path=os.path.join(noaa.staging_location,'facts')
         )
 
     # Load the NOAA fact data for {{ DS }} from csv file on local Staging

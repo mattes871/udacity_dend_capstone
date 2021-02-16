@@ -14,7 +14,7 @@ services:
       - "5433:5432"
     volumes:
       - ./data/postgresql:/var/lib/postgresql
-      - ./staging_files:/var/lib/postgresql/staging_files
+      #- ./staging_files:/var/lib/postgresql/staging_files
 
   webserver:
     image: apache/airflow:latest
@@ -41,28 +41,29 @@ services:
       timeout: 30s
       retries: 32
 
-  # scheduler:
-  #   image: apache/airflow:latest
-  #   restart: always
-  #   depends_on:
-  #     - postgres
-  #     - webserver
-  #   env_file:
-  #     - airflow.env
-  #   ports:
-  #     - "8793:8793"
-  #   volumes:
-  #     - ./dags:/opt/airflow/dags
-  #     - ./plugins:/opt/airflow/plugins
-  #     - ./airflow-logs:/opt/airflow/logs
-  #     - ./scripts:/opt/airflow/scripts
-  #     - ./variables:/opt/airflow/variables
-  #   command: scheduler
-  #   entrypoint: ./scripts/airflow-entrypoint.sh
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "[ -f /usr/local/airflow/airflow-scheduler.pid ]"]
-  #     interval: 30s
-  #     timeout: 30s
-  #     retries: 3
-  #
+  scheduler:
+    image: apache/airflow:latest
+    restart: always
+    depends_on:
+      - postgres
+      - webserver
+    env_file:
+      - airflow.env
+    ports:
+      - "8793:8793"
+    volumes:
+      - ./staging_files:/opt/airflow/staging_files
+      - ./dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+      - ./airflow-logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./variables:/opt/airflow/variables
+    #command: 'bash -c "airflow scheduler -D"'
+    entrypoint: ./scripts/start_airflow_scheduler.sh
+    healthcheck:
+      test: ["CMD-SHELL", "[ -f /usr/local/airflow/airflow-scheduler.pid ]"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+
 

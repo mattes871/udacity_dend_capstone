@@ -1,7 +1,8 @@
 import os
 import glob
+import gzip, shutil
 from airflow.contrib.hooks.aws_hook import AwsHook
-from airflow.hooks.postgres_hook import PostgresHook
+from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.models import BaseOperator
 from airflow.utils.decorators import apply_defaults
 
@@ -12,8 +13,8 @@ class LocalStageToPostgresOperator(BaseOperator):
     copy_sql = """
                 BEGIN;
                 COPY {}
-                FROM '{}'
-                DELIMITER '{}'
+                FROM stdin
+                WITH DELIMITER '{}'
                 CSV HEADER ;
                 END;
                 """
@@ -34,27 +35,43 @@ class LocalStageToPostgresOperator(BaseOperator):
         self.truncate_table = truncate_table
         self.local_path=local_path
 
-    def execute(self, context):
+    def execute(self, context: dict) -> None:
         """
           Copy csv data from local staging to postgres
         """
 
-        def get_all_csv_files(path):
+        def get_all_pattern_files(path: str, pattern: str) -> list:
             """ Return a list containing all *.csv files
-                from self.local_path """
-            all_csv_files = glob.glob(os.path.join(path,'*.csv'))
+                from self.local_path 
+                *pattern* could be e.g. '*.csv'
+            """
+            all_csv_files = glob.glob(os.path.join(path,pattern))
             return all_csv_files
 
-        def insert_csv_data_into_postgres( csv_file ):
-            """ Use COPY to bulk-insert all records form *csv_file*
-                into postgres table """
+        def insert_csv_data_into_postgres(postgres: PostgresHook,
+                                          csv_file: str,
+                                          gzipped: bool ) -> any:
+            """ Use COPY to bulk-insert all records from
+                local *csv_file* into postgres table """
             f_sql = LocalStageToPostgresOperator.copy_sql.format(
                 self.table,
-                os.path.join('/var/lib/postgresql',csv_file),
                 self.delimiter
             )
             self.log.info(f'Execute SQL: \n{f_sql}')
-            result = postgres.run(f_sql)
+            # Unzip file to temporary location if gzipped
+            if gzipped:
+                self.log.info(f'Unzipping {csv_file}')
+                with gzip.open(csv_file, 'rb') as f_in:
+                    with open('tmp.csv', 'wb') as f_out:
+                        shutil.copyfileobj(f_in, f_out)
+                csv_file = 'tmp.csv'
+            # copy_expert to import from a local file
+            self.log.info(f'Importing from {csv_file}')
+            result = postgres.copy_expert(f_sql, csv_file)
+            # If file was unzipped to a temp file, remove the temp file
+            if gzipped:
+                self.log.info(f'Removing tmp.csv')
+                os.remove('tmp.csv')
             self.log.info(f'Result: {result}')
             return result
 
@@ -68,9 +85,14 @@ class LocalStageToPostgresOperator(BaseOperator):
             #postgres.run(f'DELETE FROM {self.table}')
             postgres.run(f'TRUNCATE TABLE {self.table}')
 
-        all_csv_files = get_all_csv_files(self.local_path)
+        all_csv_files = get_all_pattern_files(self.local_path,'*.csv')
+        all_gz_csv_files =  get_all_pattern_files(self.local_path,'*.csv.gz')
         for csv_file in all_csv_files:
             self.log.info(f'Insert file {csv_file} into Postgres')
-            insert_csv_data_into_postgres(csv_file)
+            insert_csv_data_into_postgres(postgres,csv_file,gzipped=False)
+        for csv_file in all_gz_csv_files:
+            self.log.info(f'Insert file {csv_file} into Postgres')
+            insert_csv_data_into_postgres(postgres,csv_file,gzipped=True)
+
 
         self.log.info('LocalStageToPostgresOperator successful')
