@@ -11,17 +11,20 @@ services:
       - POSTGRES_PASSWORD=airflow
       - POSTGRES_DB=airflow
     ports:
+        # Host port=5433 because other Postgres is running on 5432
       - "5433:5432"
     volumes:
-      - ./data/postgresql:/var/lib/postgresql
-      #- ./staging_files:/var/lib/postgresql/staging_files
+        # Mount to a local directory instead of a volume
+      - ./data/postgresqli/data:/var/lib/postgresql/data
 
   webserver:
     image: apache/airflow:latest
     hostname: webserver
-    restart: always
+    restart: on-failure
     depends_on:
       - postgres
+    environment:
+      - POSTGRES_PASSWORD=airflow
     env_file:
       - airflow.env
     volumes:
@@ -33,20 +36,22 @@ services:
       - ./variables:/opt/airflow/variables
     ports:
       - "8080:8080"
-    # command: 'bash -c "airflow db init &&  airflow users create --username admin  --firstname Air --lastname Flow --role Admin --email airflow@airflow.com -p admin && airflow webserver -D && airflow scheduler -D"'
-    entrypoint: ./scripts/airflow-entrypoint.sh
+    entrypoint: ["./scripts/wait-for-postgres.sh", "postgres", "./scripts/airflow-entrypoint.sh"]
+    # entrypoint: ./scripts/airflow-entrypoint.sh
     healthcheck:
       test: ["CMD-SHELL", "[ -f /usr/local/airflow/airflow-webserver.pid ]"]
-      interval: 30s
+      interval: 120s
       timeout: 30s
       retries: 32
 
   scheduler:
     image: apache/airflow:latest
-    restart: always
+    restart: on-failure
     depends_on:
       - postgres
       - webserver
+    environment:
+      - POSTGRES_PASSWORD=airflow
     env_file:
       - airflow.env
     ports:
@@ -58,11 +63,11 @@ services:
       - ./airflow-logs:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
       - ./variables:/opt/airflow/variables
-    #command: 'bash -c "airflow scheduler -D"'
-    entrypoint: ./scripts/start_airflow_scheduler.sh
+    entrypoint: ["./scripts/wait-for-postgres.sh", "postgres", "./scripts/start_airflow_scheduler.sh"]
+    #entrypoint: ./scripts/start_airflow_scheduler.sh
     healthcheck:
       test: ["CMD-SHELL", "[ -f /usr/local/airflow/airflow-scheduler.pid ]"]
-      interval: 30s
+      interval: 120s
       timeout: 30s
       retries: 3
 

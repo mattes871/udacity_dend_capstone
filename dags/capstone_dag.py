@@ -54,7 +54,7 @@ noaa = SourceDataClass(
 
 # Variable needs to be defined here so that
 # it can be found by the Airflow engine when initializig the DAG
-Variable.delete('most_recent_noaa_data)'
+Variable.delete('most_recent_noaa_data')
 Variable.set('most_recent_noaa_data', noaa.data_available_from.strftime('%Y%m%d'))
 
 default_start_date = datetime(year=2021,month=1,day=31)
@@ -151,7 +151,7 @@ with DAG('climate_datamart_dag',
           concurrency = 4,
           max_active_runs = 4, # to prevent Airflow from running 
                                # multiple days/hours at the same time
-          schedule_interval = '@daily'
+          schedule_interval = None
         ) as dag:
 
     execution_date = "{{ ds_nodash }}"

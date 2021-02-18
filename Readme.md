@@ -1,5 +1,38 @@
 # Capstone Project
 
+## Installing the Repository
+
+Download the repository from Github
+
+>
+
+For this project I decided to use docker to provide a platform agnostic result.
+However, I am aware that the docker implementation for MacOs has some "features"
+in regards to mapping users and access rights that might work differently on
+other Unix systems.
+
+After downloading, you need to provide your credentials in for accessing AWS S3:
+Rename the file ./scripts/set_environment-template.sh to set_environment.sh and
+fill in your account information. Be sure to provide the AWS_SECRET_URI as a
+web encoded string!
+
+Once the AWS credentials are provided, go to the main project directory and execute
+
+> docker-compose up
+
+
+This will spawn a postgres database, the airflow webserver and the scheduler.
+
+The Airflow UI will be available at
+
+https://localhost:8080
+
+Username is 'admin', same is the password.
+
+Activate the *climate_datamart_dag* and sit back while the data is downloaded and
+processed.
+
+
 ## Defining the Project
 
 Climate and Climate Change have been on the Agenda for more than two decades. A
@@ -84,4 +117,5 @@ webserver) are containerized.
 ## Run ETL to Model the Data
 
 ## Complete Project Write Up
+
 
