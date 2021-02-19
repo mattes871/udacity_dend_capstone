@@ -3,16 +3,15 @@ import os
 from airflow import DAG
 from airflow.operators.dummy import DummyOperator
 from airflow.operators.python import PythonOperator
+from airflow.models import Variable
 #from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.providers.postgres.operators.postgres import PostgresOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 
-from airflow.models import Variable
-
 from operators.create_tables import CreateTablesOperator
-from operators.local_stage_to_postgres import LocalStageToPostgresOperator
-from operators.select_from_noaa_s3_to_staging import SelectFromNOAAS3ToStagingOperator
 from operators.copy_noaa_s3_files_to_staging import CopyNOAAS3FilesToStagingOperator
+from operators.select_from_noaa_s3_to_staging import SelectFromNOAAS3ToStagingOperator
+from operators.local_stage_to_postgres import LocalStageToPostgresOperator
 
 from helpers.sql_queries import SqlQueries
 from helpers.source_data_class import SourceDataClass
@@ -20,10 +19,6 @@ from helpers.source_data_class import SourceDataClass
 AWS_KEY    = os.environ.get('AWS_KEY')
 AWS_SECRET = os.environ.get('AWS_SECRET')
 AWS_REGION = os.environ.get('AWS_REGION', default='eu-central-1')
-
-## Set TEST_RUN = True to reduce download size by disabling
-## the download of dimension tables and docu files
-TEST_RUN = True
 
 noaa = SourceDataClass(
     source_name='noaa',
@@ -166,9 +161,13 @@ with DAG('climate_datamart_dag',
         sql_query_file=postgres_create_tables_file
         )
 
-    # >>>>> Make sure that dim- and doc-files are loaded only once
-    # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    # Get metadata for dim- and doc-files listed in
+    # the noaa data class, especially the LastModified info
     #
+    get_noaa_files_metadata_operator = DummyOperator(
+        task_id='Get_noaa_files_metadata'
+        )
+
     # Load relevant dimension and documentation files from the
     # NOAA S3 bucket into the local Staging Area (Filesystem)
     #

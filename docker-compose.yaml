@@ -1,7 +1,9 @@
-version: "2.1"
+version: "2.2"
 
-# volumes:
-#   postgresql_12:
+volumes:
+  postgresql_12_data:
+  staging_files:
+  airflow_logs:
 
 services:
   postgres:
@@ -14,8 +16,10 @@ services:
         # Host port=5433 because other Postgres is running on 5432
       - "5433:5432"
     volumes:
-        # Mount to a local directory instead of a volume
-      - ./data/postgresqli/data:/var/lib/postgresql/data
+      # Mount to a local directory instead of a volume
+      # - ./data/postgresqli/data:/var/lib/postgresql/data
+      # Mount to a docker volume for better performance (less caching)
+      - postgresql_12_data:/var/lib/postgresql/data
 
   webserver:
     image: apache/airflow:latest
@@ -28,12 +32,12 @@ services:
     env_file:
       - airflow.env
     volumes:
-      - ./staging_files:/opt/airflow/staging_files
       - ./dags:/opt/airflow/dags
       - ./scripts:/opt/airflow/scripts
-      - ./airflow-logs:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
       - ./variables:/opt/airflow/variables
+      - staging_files:/opt/airflow/staging_files
+      - airflow_logs:/opt/airflow/logs
     ports:
       - "8080:8080"
     entrypoint: ["./scripts/wait-for-postgres.sh", "postgres", "./scripts/airflow-entrypoint.sh"]
@@ -57,12 +61,12 @@ services:
     ports:
       - "8793:8793"
     volumes:
-      - ./staging_files:/opt/airflow/staging_files
       - ./dags:/opt/airflow/dags
       - ./scripts:/opt/airflow/scripts
-      - ./airflow-logs:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
       - ./variables:/opt/airflow/variables
+      - staging_files:/opt/airflow/staging_files
+      - airflow_logs:/opt/airflow/logs
     entrypoint: ["./scripts/wait-for-postgres.sh", "postgres", "./scripts/start_airflow_scheduler.sh"]
     #entrypoint: ./scripts/start_airflow_scheduler.sh
     healthcheck:
