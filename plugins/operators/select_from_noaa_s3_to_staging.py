@@ -1,6 +1,7 @@
 import os
 from datetime import date, datetime
-from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+#from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+from hooks.s3_hook_local import S3HookLocal
 from airflow.models import BaseOperator
 from airflow.utils.decorators import apply_defaults
 from operators.copy_noaa_s3_files_to_staging import CopyNOAAS3FilesToStagingOperator
@@ -70,7 +71,7 @@ class SelectFromNOAAS3ToStagingOperator(BaseOperator):
                       f'\nExecution date: {self.execution_date},'+
                       f'\nBucket & Table File: {self.s3_bucket} + {self.s3_table_file}'+
                       f'\nStaging Location: {self.local_path}')
-        s3_hook = S3Hook(aws_conn_id=self.aws_credentials)
+        s3_hook = S3HookLocal(aws_conn_id=self.aws_credentials)
         # Make sure path for local staging exists
         most_recent_data_year = datetime.strptime(self.most_recent_data_date,
                                                   '%Y%m%d').year

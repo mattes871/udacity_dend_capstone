@@ -52,22 +52,22 @@ AWS_REGION = os.environ.get('AWS_REGION', default='eu-central-1')
 #  Variable.delete('most_recent_noaa_data')
 #  Variable.set('most_recent_noaa_data', noaa.data_available_from.strftime('%Y%m%d'))
 #
-#  default_start_date = datetime(year=2021,month=1,day=31)
-#
-#  postgres_conn_id = 'postgres'
-#  postgres_create_tables_file = './plugins/helpers/create_tables.sql'
-#  csv_delimiter = ','
-#
-#  default_args = {
-#      'owner': 'matkir',
-#      'depends_on_past': False,
-#      'retries': 3,
-#      'catchup': False,
-#      'retry_delay': timedelta(minutes=5),
-#      'email_on_retry': False,
-#      'start_date': default_start_date,
-#      'region': AWS_REGION
-#  }
+default_start_date = datetime(year=2021,month=1,day=31)
+
+postgres_conn_id = 'postgres'
+postgres_create_tables_file = './plugins/helpers/create_tables.sql'
+csv_delimiter = ','
+
+default_args = {
+    'owner': 'matkir',
+    'depends_on_past': False,
+    'retries': 3,
+    'catchup': False,
+    'retry_delay': timedelta(minutes=5),
+    'email_on_retry': False,
+    'start_date': default_start_date,
+    'region': AWS_REGION
+}
 #
 #  def get_date_of_most_recent_noaa_facts() -> None :
 #      """ Get the date of the most recent fact in
@@ -138,21 +138,21 @@ AWS_REGION = os.environ.get('AWS_REGION', default='eu-central-1')
 #
 #
 #
-#  with DAG('climate_datamart_dag',
-#            default_args = default_args,
-#            description = 'Load climate data and create a regular report',
-#            catchup = False,
-#            start_date = datetime(year=2021,month=1,day=31),
-#            concurrency = 4,
-#            max_active_runs = 4, # to prevent Airflow from running
-#                                 # multiple days/hours at the same time
-#            schedule_interval = None
-#          ) as dag:
-#
-#      execution_date = "{{ ds_nodash }}"
-#
-#      start_operator = DummyOperator(task_id='Begin_execution')
-#
+with DAG('climate_datamart_dag',
+          default_args = default_args,
+          description = 'Load climate data and create a regular report',
+          catchup = False,
+          start_date = datetime(year=2021,month=1,day=31),
+          concurrency = 4,
+          max_active_runs = 4, # to prevent Airflow from running
+                               # multiple days/hours at the same time
+          schedule_interval = None
+        ) as dag:
+
+    execution_date = "{{ ds_nodash }}"
+
+    start_operator = DummyOperator(task_id='Begin_execution')
+
 #      # Create NOAA tables in Staging Database (Postgresql)
 #      #
 #      create_noaa_tables_operator = CreateTablesOperator(
@@ -238,14 +238,14 @@ AWS_REGION = os.environ.get('AWS_REGION', default='eu-central-1')
 #      #
 #      check_fact_quality_operator = DummyOperator(task_id='Check_fact_quality')
 #
-#      end_operator = DummyOperator(task_id='Stop_execution')
-#
-#
-#  # ............................................
-#  # Defining the DAG
-#  # ............................................
-#
-#  start_operator >> create_noaa_tables_operator
+    end_operator = DummyOperator(task_id='Stop_execution')
+
+
+# ............................................
+# Defining the DAG
+# ............................................
+
+start_operator >> end_operator
 #
 #  create_noaa_tables_operator >> copy_noaa_s3_files_to_staging_operator
 #  copy_noaa_s3_files_to_staging_operator >> load_noaa_dim_tables_into_postgres_operator
