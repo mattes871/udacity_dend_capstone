@@ -2,19 +2,17 @@ import os
 import subprocess
 import boto3
 from datetime import date, datetime
-from airflow.models import Connection
 from hooks.s3_hook_local import S3HookLocal
-from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.models import BaseOperator
 from airflow.utils.decorators import apply_defaults
 
-class GetS3FileMetadata(BaseOperator):
-    """ Downloads a file from Amazon S3 to
-        the staging directory given by the
-        data source type
+class CopyNOAADimFileToStaging(BaseOperator):
+    """ Download the specified file from the NOAA S3 bucket
+        if a newer version of this file exists on S3 as 
+        compared to the local staging area
     """
 
-    ui_color = '#FFFF00'
+    ui_color = '#AAAA00'
     template_fields=["s3_bucket",
                      "s3_prefix",
                      "s3_keys"]
@@ -24,34 +22,31 @@ class GetS3FileMetadata(BaseOperator):
                  aws_credentials: str ='',
                  s3_bucket: str ='',
                  s3_prefix: str ='',
-                 s3_keys: list ='',
+                 s3_key:    str ='',
                  *args, **kwargs):
 
         super(GetS3FileMetadata, self).__init__(*args, **kwargs)
         self.aws_credentials=aws_credentials
         self.s3_bucket=s3_bucket
         self.s3_prefix=s3_prefix
-        self.s3_keys=s3_keys
+        self.s3_key=s3_key
 
     def execute(self, context: dict) -> None:
-        """ Use AWS CLI to get metadata of certain S3 files
-            Unfortunately, metadata functionality is not (yet)
-            built into the aws hooks and operators
-            AWSCLI must be installed
+        """ Check if *file* exists on NOAA S3 bucket
+            Get the files LastModified date and compare
+            with local staging area. Download the file
+            from NOAA S3 bucket if a newer version exists.
         """
 
-        #aws_cred = Connection.get_password(f'{self.aws_credentials}')
-        #print(f"AWS Credentials: {aws_cred}")
-        #s3_hook = S3Hook(self.aws_credentials)
-        #s3_conn = s3_hook.get_conn()
-        #print(f"AWS Conn: {s3_conn}")
-        s3_pwd = Connection('aws_credentials').get_uri()
-        print(f"AWS PWD: {s3_pwd}")        
-        print(f"Credentials: {os.environ.get('AWS_KEY')}, {os.environ.get('AWS_SECRET')}")
+        # Check if s3_key exists on NOAA S3
+        try:
+           pass
+        except:
+            pass
         s3_client = boto3.client('s3',
-                                aws_access_key_id=os.environ.get('AWS_KEY'),
-                                aws_secret_access_key=os.environ.get('AWS_SECRET_URI'),
-                                region_name=os.environ.get('AWS_REGION'))
+                                aws_access_key_id='',
+                                aws_secret_access_key='',
+                                region_name='eu-central-1')
         results = []
         for key in self.s3_keys:
             print(f"YYYY: {self.s3_bucket} / {key}")

@@ -24,11 +24,17 @@ services:
   webserver:
     image: apache/airflow:latest
     hostname: webserver
-    restart: on-failure
+    restart: always
     depends_on:
       - postgres
     environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_DB=airflow
       - POSTGRES_PASSWORD=airflow
+      - AWS_KEY=${AWS_KEY}
+      - AWS_SECRET=${AWS_SECRET}
+      - AWS_SECRET_URI=${AWS_SECRET_URI}
+      - AWS_REGION=${AWS_REGION}
     env_file:
       - airflow.env
     volumes:
@@ -40,13 +46,13 @@ services:
       - airflow_logs:/opt/airflow/logs
     ports:
       - "8080:8080"
-    entrypoint: ["./scripts/wait-for-postgres.sh", "postgres", "./scripts/airflow-entrypoint.sh"]
-    # entrypoint: ./scripts/airflow-entrypoint.sh
+    #entrypoint: ["./scripts/wait-for-postgres.sh", "postgres", "./scripts/airflow-entrypoint.sh"]
+    entrypoint: ./scripts/airflow-entrypoint.sh
     healthcheck:
       test: ["CMD-SHELL", "[ -f /usr/local/airflow/airflow-webserver.pid ]"]
       interval: 120s
-      timeout: 30s
-      retries: 32
+      timeout:  30s
+      retries:  32
 
   scheduler:
     image: apache/airflow:latest
@@ -67,12 +73,12 @@ services:
       - ./variables:/opt/airflow/variables
       - staging_files:/opt/airflow/staging_files
       - airflow_logs:/opt/airflow/logs
-    entrypoint: ["./scripts/wait-for-postgres.sh", "postgres", "./scripts/start_airflow_scheduler.sh"]
-    #entrypoint: ./scripts/start_airflow_scheduler.sh
+    # entrypoint: ["./scripts/wait-for-postgres.sh", "postgres", "./scripts/start_airflow_scheduler.sh"]
+    entrypoint: ./scripts/start_airflow_scheduler.sh
     healthcheck:
       test: ["CMD-SHELL", "[ -f /usr/local/airflow/airflow-scheduler.pid ]"]
       interval: 120s
-      timeout: 30s
-      retries: 3
+      timeout:  30s
+      retries:  3
 
 

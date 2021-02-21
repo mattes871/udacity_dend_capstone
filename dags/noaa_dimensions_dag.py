@@ -25,50 +25,21 @@ AWS_KEY    = os.environ.get('AWS_KEY')
 AWS_SECRET = os.environ.get('AWS_SECRET')
 AWS_REGION = os.environ.get('AWS_REGION', default='eu-central-1')
 
-noaa = SourceDataClass(
-    source_name='noaa',
-    description="""Climate KPIs from 200k stations worldwide, 
-                    dating back as far as 1763""",
-    source_type='amazon s3',
-    source_params={
-        'aws_credentials': 'aws_credentials',
-        's3_bucket': 'noaa-ghcn-pds',
-        'files':  ['by-year-status.txt',
-                   'ghcn-daily-by_year-format.rtf',
-                   #  'ghcnd-countries.txt',
-                   #  'ghcnd-inventory.txt',
-                   #  'ghcnd-states.txt',
-                   #  'ghcnd-stations.txt',
-                   #  'ghcnd-version.txt',
-                   #  'index.html',
-                   #  'mingle-list.txt',
-                   'readme.txt',
-                   'status.txt'],
-        'prefixes': ['csv','csv.gz'],
-        'fact_format': 'csv',
-        'compression': 'gzip',
-        'delim':       ','},
-    data_available_from=date(year=2019,month=1,day=1),
-    staging_location='./staging_files/noaa',
-    version='v2021-02-05')
 
-
-Variable.delete('noaa_test')
-Variable.set('noaa_test', True)
-
-Variable.delete('noaa_bucket')
-Variable.set('noaa_bucket', noaa.source_params['s3_bucket'])
-Variable.delete('noaa_files')
-Variable.set('noaa_files', noaa.source_params['files'])
-
-
+noaa_config = Variable.get("noaa_config", deserialize_json=True)
+noaa_aws_creds = noaa_config['source_params']['aws_credentials']
+noaa_s3_bucket = noaa_config['source_params']['s3_bucket']
+noaa_s3_keys   = noaa_config['source_params']['s3_keys']
+noaa_s3_delim  = noaa_config['source_params']["delimiter"]
+noaa_data_available_from = noaa_config['data_available_from']
+noaa_staging_location = noaa_config['staging_location']
 
 
 default_start_date = datetime(year=2021,month=1,day=31)
 
 postgres_conn_id = 'postgres'
-postgres_create_dim_tables_file = './dags/sql/create_dim_tables.sql'
-csv_delimiter = ','
+postgres_create_dim_tables_file = os.path.join(os.environ.get('AIRFLOW_HOME','.'),
+                                               '/dags/sql/create_dim_tables.sql')
 
 default_args = {
     'owner': 'matkir',
@@ -110,9 +81,9 @@ with DAG('noaa_dimension_dag',
     #
     get_noaa_files_metadata_operator = GetS3FileMetadata(
         task_id='Get_noaa_files_metadata',
-        s3_bucket = noaa.source_params['s3_bucket'], #"{{ noaa_bucket }}",
+        s3_bucket = noaa_s3_bucket, #"{{ noaa_bucket }}",
         s3_prefix = '',
-        s3_keys   = noaa.source_params['files'] #,"{{ noaa_files }}"
+        s3_keys   = noaa_s3_keys #,"{{ noaa_files }}"
         )
 
     # Load relevant dimension and documentation files from the
@@ -120,12 +91,12 @@ with DAG('noaa_dimension_dag',
     #
     copy_noaa_s3_files_to_staging_operator = CopyNOAAS3FilesToStagingOperator(
         task_id='Copy_noaa_s3_files_to_staging',
-        aws_credentials=noaa.source_params['aws_credentials'],
-        s3_bucket=noaa.source_params['s3_bucket'],
+        aws_credentials=noaa_aws_creds,
+        s3_bucket=noaa_s3_bucket,
         s3_prefix='',
-        s3_files=noaa.source_params['files'],
+        s3_keys=noaa_s3_keys,
         replace_existing=True,
-        local_path=os.path.join(noaa.staging_location,'dimensions')
+        local_path=os.path.join(noaa_staging_location, 'dimensions')
         )
 
     # In case the data changed, load the NOAA dimension data from csv file on
@@ -139,7 +110,7 @@ with DAG('noaa_dimension_dag',
         #  table='public.weather_data_raw',
         #  delimiter=',',
         #  truncate_table=True,
-        #  local_path=os.path.join(noaa.staging_location,'facts'),
+        #  local_path=os.path.join(noaa_staging_location,'facts'),
         #  )
 
     # Run quality checks on dimension data

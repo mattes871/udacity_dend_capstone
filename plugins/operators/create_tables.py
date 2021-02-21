@@ -23,6 +23,7 @@ class CreateTablesOperator(BaseOperator):
         super(CreateTablesOperator, self).__init__(*args, **kwargs)
         self.postgres_conn_id = postgres_conn_id
         self.sql_query_file = sql_query_file
+        self.log.info(f'Init CreateTablesOperator({postgres_conn_id},{sql_query_file})')
 
     def execute(self, context):
         """

@@ -1,0 +1,29 @@
+{
+    "noaa_config": {
+        "source_name": "noaa",
+        "description": "Climate KPIs from 200k stations worldwide, dating back as far as 1763",
+        "source_type": "amazon s3",
+        "source_params": {
+            "aws_credentials": "aws_credentials",
+            "s3_bucket": "noaa-ghcn-pds",
+            "s3_keys":["by-year-status.txt",
+                       "ghcn-daily-by_year-format.rtf",
+                       "ghcnd-countries.txt",
+                       "ghcnd-inventory.txt",
+                       "ghcnd-states.txt",
+                       "ghcnd-stations.txt",
+                       "ghcnd-version.txt",
+                       "index.html",
+                       "mingle-list.txt",
+                       "readme.txt",
+                       "status.txt"],
+            "s3_prefixes": ["csv","csv.gz"],
+            "fact_format": "csv",
+            "compression": "gzip",
+            "delimiter": ","
+        },
+        "data_available_from": "2019-01-01",
+        "staging_location": "./staging_files/noaa",
+        "version": "v2021-02-20"
+    }
+}
