@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
 
-echo "Nur ein Test XXXXXXXXXXXXXXXXXXXXXXXXXXx"
-
+airflow tasks test noaa_dimension_dag Create_noaa_dim_tables 2020-01-31
 

@@ -18,9 +18,12 @@ if [[ -e /usr/local/airflow/variables/noaa.json ]]; then
          airflow variables import /usr/local/airflow/variables/noaa.json
 fi
 echo "Checking for connections to add to Airflow"
-if [[ -e /usr/local/airflow/variables/connections.json ]]; then
-         airflow connections import /usr/local/airflow/variables/connections.json
-fi
+#if [[ -e /usr/local/airflow/variables/connections.json ]]; then
+#         airflow connections import /usr/local/airflow/variables/connections.json
+#fi
+# Use shell script to create connections, so that credentials
+# can be passed via Environment variables instead of a json file
+${AIRFLOW_HOME}/scripts/create_airflow_connections.sh
 
 #echo "Sourcing set_environment.sh"
 #source ./scripts/set_environment.sh

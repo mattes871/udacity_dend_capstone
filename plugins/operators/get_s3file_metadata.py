@@ -14,7 +14,7 @@ class GetS3FileMetadata(BaseOperator):
         data source type
     """
 
-    ui_color = '#FFFF00'
+    ui_color = '#AAAAFF'
     template_fields=["s3_bucket",
                      "s3_prefix",
                      "s3_keys"]

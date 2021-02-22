@@ -12,7 +12,7 @@ class CopyNOAADimFileToStaging(BaseOperator):
         compared to the local staging area
     """
 
-    ui_color = '#AAAA00'
+    ui_color = '#AAAACC'
     template_fields=["s3_bucket",
                      "s3_prefix",
                      "s3_keys"]

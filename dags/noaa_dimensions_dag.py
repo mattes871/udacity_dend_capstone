@@ -38,8 +38,7 @@ noaa_staging_location = noaa_config['staging_location']
 default_start_date = datetime(year=2021,month=1,day=31)
 
 postgres_conn_id = 'postgres'
-postgres_create_dim_tables_file = os.path.join(os.environ.get('AIRFLOW_HOME','.'),
-                                               '/dags/sql/create_dim_tables.sql')
+postgres_create_dim_tables_file = 'dags/sql/create_dim_tables.sql'
 
 default_args = {
     'owner': 'matkir',
@@ -73,7 +72,8 @@ with DAG('noaa_dimension_dag',
     create_noaa_dim_tables_operator = CreateTablesOperator(
         task_id='Create_noaa_dim_tables',
         postgres_conn_id=postgres_conn_id,
-        sql_query_file=postgres_create_dim_tables_file
+        sql_query_file=os.path.join(os.environ.get('AIRFLOW_HOME','.'),
+                                    postgres_create_dim_tables_file)
         )
 
     # Get metadata for dim- and doc-files listed in

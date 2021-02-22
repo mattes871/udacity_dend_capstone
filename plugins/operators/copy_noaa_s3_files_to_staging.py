@@ -11,7 +11,7 @@ class CopyNOAAS3FilesToStagingOperator(BaseOperator):
         data source type
     """
 
-    ui_color = '#FF0000'
+    ui_color = '#AAAACC'
 
     @apply_defaults
     def __init__(self,

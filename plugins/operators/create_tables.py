@@ -2,13 +2,15 @@ from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.models import BaseOperator
 from airflow.utils.decorators import apply_defaults
 
+import os
+
 class CreateTablesOperator(BaseOperator):
     """ Create Tables on Postgresql for
         loading the data from S3 into
         a staging area
     """
 
-    ui_color = '#FFFFFF'
+    ui_color = '#AAAAAA'
     sql_cmds = """BEGIN ;
                   {}
                   END ;
@@ -23,7 +25,6 @@ class CreateTablesOperator(BaseOperator):
         super(CreateTablesOperator, self).__init__(*args, **kwargs)
         self.postgres_conn_id = postgres_conn_id
         self.sql_query_file = sql_query_file
-        self.log.info(f'Init CreateTablesOperator({postgres_conn_id},{sql_query_file})')
 
     def execute(self, context):
         """

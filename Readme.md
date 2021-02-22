@@ -50,13 +50,6 @@ The data sources are collected and provided by
 * and the National Oceanic and Atmospheric Administration (NOAA) of the U.S.
   Department of Commerce
 
-### ECA&D dataset
-**Scope**: 20,000 stations, 65 countries, European + Mediterranean countries
-**Source platform**: AWS S3 http site
-**File structre**: One file per KPI
-**Format**: .zip text-file with explanatory header
-**Downloads**: https://www.ecad.eu/dailydata/predefinedseries.ph
-
 ### NOAA dataset
 **Scope**: 160,000 stations worldwide, partially dating back until 1763
 **Source platform**: AWS S3 bucket
@@ -74,12 +67,21 @@ See https://docs.opendata.aws/noaa-ghcn-pds/readme.html for more details.
 All data sources used in this project are publicly available and
 free of charge for educational purposes.
 
+### ECA&D dataset
+**Scope**: 20,000 stations, 65 countries, European + Mediterranean countries
+**Source platform**: AWS S3 http site
+**File structre**: One file per KPI
+**Format**: .zip text-file with explanatory header
+**Downloads**: https://www.ecad.eu/dailydata/predefinedseries.ph
+
 ## Scope the Project and Gather Data
 
 Setup a workflow that
-- downloads the most recent data from NOAA onto a Staging area 
+- downloads data from NOAA into a Staging area
+- Inserts the data from staging area into a Postgresql DB ensuring
+  quality control and duplicate handling
 - transforms the data into meaningful entities
-- stores the data in a database
+- stores the entities in a database
 - performas quality checks on the data
 Further requirements:
 - the workflow should be able to backfill past data and data that was missed due to unavailability of the source data.
@@ -88,7 +90,9 @@ Further requirements:
 
 
 Workflow should be:
-- Download from S3 into a Staging Area (e.g. local)
+- Download fact files from S3 into a Staging Area (e.g. local)
+- Download documentation and dimension files into a Staging Area if
+  the files are newer than current files on Staging
 - Conduct the ETL and store the data in a Postgresql Database
 - Run essential data qualit checks
 - Run a sample analytics use case to showcase the usefulness of the data
@@ -97,7 +101,12 @@ Workflow should be:
 ## Setup the infrastructure
 
 ### Secrets & Credentials
-In this project, all access credentials are passed via environment variables.  We use a shell script to set these variables. The .git repository contains a template file of the script - the original script is not part of the repository (.gitignore).
+All access credentials need to be set/exported in the shell that executes the
+docker-compose up command. 
+
+Unfortunately, this is also the reason why the airflow connections use a
+different mechanism for their setup than the airflow variables, which are loaded
+from a .json file.
 
 
 ### Access to S3 buckets on AWS
