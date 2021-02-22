@@ -2,7 +2,7 @@ version: "2.2"
 
 volumes:
   postgresql_12_data:
-  staging_files:
+  # staging_files:
   airflow_logs:
 
 services:
@@ -42,7 +42,7 @@ services:
       - ./scripts:/opt/airflow/scripts
       - ./plugins:/opt/airflow/plugins
       - ./variables:/opt/airflow/variables
-      - staging_files:/opt/airflow/staging_files
+      - ./staging_files:/opt/airflow/staging_files
       - airflow_logs:/opt/airflow/logs
     ports:
       - "8080:8080"
@@ -56,7 +56,7 @@ services:
 
   scheduler:
     image: apache/airflow:latest
-    restart: on-failure
+    restart: always
     depends_on:
       - postgres
       - webserver
@@ -74,7 +74,7 @@ services:
       - ./scripts:/opt/airflow/scripts
       - ./plugins:/opt/airflow/plugins
       - ./variables:/opt/airflow/variables
-      - staging_files:/opt/airflow/staging_files
+      - ./staging_files:/opt/airflow/staging_files
       - airflow_logs:/opt/airflow/logs
     # entrypoint: ["./scripts/wait-for-postgres.sh", "postgres", "./scripts/start_airflow_scheduler.sh"]
     entrypoint: ./scripts/start_airflow_scheduler.sh
@@ -82,6 +82,6 @@ services:
       test: ["CMD-SHELL", "[ -f /usr/local/airflow/airflow-scheduler.pid ]"]
       interval: 120s
       timeout:  30s
-      retries:  3
+      retries:  9
 
 

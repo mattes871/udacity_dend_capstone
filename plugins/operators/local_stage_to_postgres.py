@@ -8,7 +8,7 @@ from airflow.utils.decorators import apply_defaults
 
 
 class LocalStageToPostgresOperator(BaseOperator):
-    ui_color = '#358140'
+    ui_color = '#00FF99'
     #template_fields=("s3_key",)
     copy_sql = """
                 BEGIN;

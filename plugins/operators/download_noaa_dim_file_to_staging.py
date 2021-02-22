@@ -2,11 +2,11 @@ import os
 import boto3
 from dateutil.tz import tzutc
 from datetime import date, datetime
-from hooks.s3_hook_local import S3HookLocal
+from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.models import BaseOperator
 from airflow.utils.decorators import apply_defaults
 
-class CopyNOAADimFileToStagingOperator(BaseOperator):
+class DownloadNOAADimFileToStagingOperator(BaseOperator):
     """ If a new version of the specified file exists
         in the NOAA S3 bucket then download it to the
         local staging area. Otherwise do nothing.
@@ -18,22 +18,22 @@ class CopyNOAADimFileToStagingOperator(BaseOperator):
         unnecessary transfer costs  
     """
 
-    ui_color = '"#AAAACC'
+    ui_color = '"#33FFFF'
     template_fields=["s3_bucket",
                      "s3_prefix",
                      "s3_key"]
 
     @apply_defaults
     def __init__(self,
-                 aws_credentials: str ='',
-                 s3_bucket:  str ='',
-                 s3_prefix:  str ='',
-                 s3_key:     str ='',
-                 local_path: str ='',
-                 replace_existing: bool =True,
+                 aws_credentials: str = '',
+                 s3_bucket:  str = '',
+                 s3_prefix:  str = '',
+                 s3_key:     str = '',
+                 local_path: str = '',
+                 replace_existing: bool = True,
                  *args, **kwargs):
 
-        super(CopyNOAADimFileToStagingOperator, self).__init__(*args, **kwargs)
+        super(DownloadNOAADimFileToStagingOperator, self).__init__(*args, **kwargs)
         self.aws_credentials=aws_credentials
         self.s3_bucket=s3_bucket
         self.s3_prefix=s3_prefix
@@ -125,8 +125,14 @@ class CopyNOAADimFileToStagingOperator(BaseOperator):
                     self.log.info(f"File '{full_local_filename}' already exists."
                                 + f" Renaming to '{archive_filename}'")
                     os.rename(full_local_filename, archive_filename)
+            
+            # Make sure path for local staging exists
+            if not os.path.exists(local_path):
+                self.log.info(f"Creating path '{local_path}'")
+                os.makedirs(local_path)
+
             # Downloading the file
-            s3_hook = S3HookLocal(aws_conn_id=aws_credentials, local_dummy=True)
+            s3_hook = S3Hook(aws_conn_id=aws_credentials)
             tmp_filename = s3_hook.download_file(key=full_s3_filename,
                                   bucket_name=s3_bucket,
                                   local_path=local_path)

@@ -9,12 +9,16 @@ from airflow.providers.postgres.operators.postgres import PostgresOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 #from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from hooks.s3_hook_local import S3HookLocal
-from airflow.providers.amazon.aws.operators.s3_list import S3ListOperator
+
+# from airflow.operators.subdag import SubDagOperator
+# from subdags.download_dim_subdag import download_noaa_dim_subdag
+from airflow.utils.task_group import TaskGroup
+
 
 from operators.create_tables import CreateTablesOperator
 #from operators.copy_noaa_s3_files_to_staging import CopyNOAAS3FilesToStagingOperator
 #from operators.get_s3file_metadata import GetS3FileMetadata
-from operators.copy_noaa_dim_file_to_staging import CopyNOAADimFileToStagingOperator
+from operators.download_noaa_dim_file_to_staging import DownloadNOAADimFileToStagingOperator
 
 from operators.select_from_noaa_s3_to_staging import SelectFromNOAAS3ToStagingOperator
 from operators.local_stage_to_postgres import LocalStageToPostgresOperator
@@ -54,8 +58,9 @@ default_args = {
     'region': AWS_REGION
 }
 
+DAG_NAME = 'noaa_dimension_dag'
 
-with DAG('noaa_dimension_dag',
+with DAG(DAG_NAME,
           default_args = default_args,
           description = 'Load climate data and create a regular report',
           catchup = False,
@@ -63,12 +68,12 @@ with DAG('noaa_dimension_dag',
           concurrency = 4,
           max_active_runs = 4, # to prevent Airflow from running 
                                # multiple days/hours at the same time
-          schedule_interval = None
+          schedule_interval = '@once'
         ) as dag:
 
     execution_date = "{{ ds_nodash }}"
 
-    start_operator = DummyOperator(task_id='Begin_execution')
+    start_operator = DummyOperator(task_id='Begin_execution', dag=dag)
 
     # Create NOAA dimension tables in Staging Database (Postgresql)
     #
@@ -76,41 +81,93 @@ with DAG('noaa_dimension_dag',
         task_id='Create_noaa_dim_tables',
         postgres_conn_id=postgres_conn_id,
         sql_query_file=os.path.join(os.environ.get('AIRFLOW_HOME','.'),
-                                    postgres_create_dim_tables_file)
+                                    postgres_create_dim_tables_file),
+        dag=dag
         )
 
     # Load relevant dimension and documentation files from the
     # NOAA S3 bucket into the local Staging Area (Filesystem)
     #
-    copy_noaa_dim_file_to_staging_operator = CopyNOAADimFileToStagingOperator(
-        task_id='Copy_noaa_dim_file_to_staging',
-        aws_credentials=noaa_aws_creds,
-        s3_bucket=noaa_s3_bucket,
-        s3_prefix='',
-        s3_key=noaa_s3_keys[0],
-        replace_existing=True,
-        local_path=os.path.join(noaa_staging_location, 'dimensions')
-        )
+    # >>>> turns out that dynamic SubDAGs in Airflow are still an issue
+    # >>>> Unfortunately, static SubDAGs do not improve readability
+    #  noaa_dim_s3_to_staging_operator = SubDagOperator(
+    #      task_id='Noaa_dim_s3_to_staging',
+    #      subdag=download_noaa_dim_subdag(
+    #          parent_dag_name=DAG_NAME,
+    #          task_id='Noaa_dim_s3_to_staging',
+    #          aws_credentials=noaa_aws_creds,
+    #          s3_bucket=noaa_s3_bucket,
+    #          s3_prefix='',
+    #          s3_keys=[noaa_s3_keys[i] for i in [2,3,5]],
+    #          replace_existing=True,
+    #          local_path=os.path.join(noaa_staging_location, 'dimensions')
+    #          ),
+    #      dag=dag
+    #      )
+    # >>>> Using TaskGroup instead of SubDags
+    with TaskGroup("download_noaa_dims") as download_noaa_dims:
+        s3_index = 2
+        load_countries = DownloadNOAADimFileToStagingOperator(
+            task_id=f'load_{noaa_s3_keys[s3_index][:-4]}_dim_file',
+            aws_credentials=noaa_aws_creds,
+            s3_bucket=noaa_s3_bucket,
+            s3_prefix='',
+            s3_key=noaa_s3_keys[s3_index],
+            replace_existing=True,
+            local_path=os.path.join(noaa_staging_location, 'dimensions')
+            )
+        s3_index = 3
+        load_inventory = DownloadNOAADimFileToStagingOperator(
+            task_id=f'load_{noaa_s3_keys[s3_index][:-4]}_dim_file',
+            aws_credentials=noaa_aws_creds,
+            s3_bucket=noaa_s3_bucket,
+            s3_prefix='',
+            s3_key=noaa_s3_keys[s3_index],
+            replace_existing=True,
+            local_path=os.path.join(noaa_staging_location, 'dimensions')
+            )
+        s3_index = 5
+        load_stations = DownloadNOAADimFileToStagingOperator(
+            task_id=f'load_{noaa_s3_keys[s3_index][:-4]}_dim_file',
+            aws_credentials=noaa_aws_creds,
+            s3_bucket=noaa_s3_bucket,
+            s3_prefix='',
+            s3_key=noaa_s3_keys[s3_index],
+            replace_existing=True,
+            local_path=os.path.join(noaa_staging_location, 'dimensions')
+            )
+
+    #  copy_noaa_dim_file_to_staging_operator = DownloadNOAADimFileToStagingOperator(
+    #      task_id='Copy_noaa_dim_file_to_staging',
+    #      aws_credentials=noaa_aws_creds,
+    #      s3_bucket=noaa_s3_bucket,
+    #      s3_prefix='',
+    #      s3_key=noaa_s3_keys[0],
+    #      replace_existing=True,
+    #      local_path=os.path.join(noaa_staging_location, 'dimensions')
+    #      )
 
     # In case the data changed, load the NOAA dimension data from csv file on
     # local Staging into the tables prepared on Staging Database (Postgresql)
     #
-    load_noaa_dim_tables_into_postgres_operator = DummyOperator(
-        task_id='Load_noaa_dim_tables_into_postgres')
-        #  LocalStageToPostgresOperator(
-        #  task_id='Load_noaa_dim_tables_into_postgres',
+    load_noaa_dim_tables_into_postgres_operator = DummyOperator( # LocalStageToPostgresOperator( 
+        task_id='Load_noaa_dim_tables_into_postgres',
         #  postgres_conn_id=postgres_conn_id,
         #  table='public.weather_data_raw',
         #  delimiter=',',
         #  truncate_table=True,
         #  local_path=os.path.join(noaa_staging_location,'facts'),
-        #  )
+        dag=dag
+        )
 
     # Run quality checks on dimension data
     #
-    check_dim_quality_operator = DummyOperator(task_id='Check_dim_quality')
+    check_dim_quality_operator = DummyOperator(
+        task_id='Check_dim_quality',
+        dag=dag
+    )
 
-    end_operator = DummyOperator(task_id='Stop_execution')
+    end_operator = DummyOperator(task_id='Stop_execution', dag=dag)
 
 
 # ............................................
@@ -118,9 +175,8 @@ with DAG('noaa_dimension_dag',
 # ............................................
 
 start_operator >> create_noaa_dim_tables_operator
-
-create_noaa_dim_tables_operator >> copy_noaa_dim_file_to_staging_operator
-copy_noaa_dim_file_to_staging_operator >> load_noaa_dim_tables_into_postgres_operator
+create_noaa_dim_tables_operator >> download_noaa_dims
+download_noaa_dims >> load_noaa_dim_tables_into_postgres_operator
 load_noaa_dim_tables_into_postgres_operator >> check_dim_quality_operator
 check_dim_quality_operator >> end_operator
 

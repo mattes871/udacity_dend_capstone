@@ -6,7 +6,7 @@
 set_environment.sh
 __pycache__/*
 */__pycache__/*
-**/__pycache__/
+**/__pycache__/*
 plugins/operators/__pycache__/*
 plugins/hooks/__pycache__/*
 *airflow-logs/*
