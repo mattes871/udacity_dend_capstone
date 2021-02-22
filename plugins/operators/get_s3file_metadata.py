@@ -14,51 +14,48 @@ class GetS3FileMetadata(BaseOperator):
         data source type
     """
 
-    ui_color = '#AAAAFF'
-    template_fields=["s3_bucket",
+    ui_color = '#00FFFF'
+    template_fields=["noaa_info",
+                     "s3_bucket",
                      "s3_prefix",
                      "s3_keys"]
 
     @apply_defaults
     def __init__(self,
-                 aws_credentials: str ='',
+                 noaa_info: str = '',
                  s3_bucket: str ='',
                  s3_prefix: str ='',
                  s3_keys: list ='',
                  *args, **kwargs):
 
         super(GetS3FileMetadata, self).__init__(*args, **kwargs)
-        self.aws_credentials=aws_credentials
+        self.noaa_info = noaa_info
         self.s3_bucket=s3_bucket
         self.s3_prefix=s3_prefix
         self.s3_keys=s3_keys
 
     def execute(self, context: dict) -> None:
-        """ Use AWS CLI to get metadata of certain S3 files
-            Unfortunately, metadata functionality is not (yet)
-            built into the aws hooks and operators
-            AWSCLI must be installed
+        """ Use Boto3 to get metadata of certain S3 files
+            Unfortunately, the metadata functionality required here 
+            is not (yet) built into the aws hooks and operators.
         """
 
-        #aws_cred = Connection.get_password(f'{self.aws_credentials}')
-        #print(f"AWS Credentials: {aws_cred}")
-        #s3_hook = S3Hook(self.aws_credentials)
-        #s3_conn = s3_hook.get_conn()
-        #print(f"AWS Conn: {s3_conn}")
-        s3_pwd = Connection('aws_credentials').get_uri()
-        print(f"AWS PWD: {s3_pwd}")        
-        print(f"Credentials: {os.environ.get('AWS_KEY')}, {os.environ.get('AWS_SECRET')}")
+        aws_key = os.environ.get('AWS_KEY')
+        aws_secret = os.environ.get('AWS_SECRET')
+        aws_region = os.environ.get('AWS_REGION')
+        self.log.info(f"Getting S3 metadata using boto3 library")
         s3_client = boto3.client('s3',
-                                aws_access_key_id=os.environ.get('AWS_KEY'),
-                                aws_secret_access_key=os.environ.get('AWS_SECRET_URI'),
-                                region_name=os.environ.get('AWS_REGION'))
+                                aws_access_key_id=aws_key,
+                                aws_secret_access_key=aws_secret,
+                                region_name=aws_region)
         results = []
         for key in self.s3_keys:
-            print(f"YYYY: {self.s3_bucket} / {key}")
+            print(f"aws s3api head-object --bucket '{self.s3_bucket}' --key '{key}'")
             try:
                 response = s3_client.head_object(Bucket=self.s3_bucket,
                                                  Key=key,
-                                                 RequestPayer='requester')
+                                                 RequestPayer='requester',
+                                                 ExpectedBucketOwner='')
             except:
                 response=f'Could not execute  aws s3api head-object'
             else:

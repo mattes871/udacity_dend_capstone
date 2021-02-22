@@ -23,21 +23,21 @@ class S3HookLocal(S3Hook):
                    input_serialization: dict = None, 
                    output_serialization: dict = None, 
                    *args, **kwargs):
-        if self.dummy_local:
+        if self.local_dummy:
             self.log.info(f'Passing S3HookLocal.select_key')
-            pass
+            return ""
         else:
-            super() \
-                .select_key(key, bucket_name, expression,
-                            expression_type, input_serialization,
-                            output_serialization, *args, **kwargs)
+            return super() \
+                    .select_key(key, bucket_name, expression,
+                                expression_type, input_serialization,
+                                output_serialization, *args, **kwargs)
 
     def download_file(self, key: str, bucket_name: str = None,
                       local_path: str = None, 
                       *args, **kwargs):
-        if self.dummy_local:
+        if self.local_dummy:
             self.log.info(f'Passing S3HookLocal.download_file')
-            pass
+            return ""
         else:
-            super().download_files(key, bucket_name, local_path,
-                                   *args, **kwargs)
+            return super().download_files(key, bucket_name, local_path,
+                                          *args, **kwargs)

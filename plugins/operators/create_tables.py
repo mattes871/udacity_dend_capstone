@@ -10,7 +10,7 @@ class CreateTablesOperator(BaseOperator):
         a staging area
     """
 
-    ui_color = '#AAAAAA'
+    ui_color = '#99FFFF'
     sql_cmds = """BEGIN ;
                   {}
                   END ;

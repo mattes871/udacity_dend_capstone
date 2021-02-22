@@ -30,7 +30,6 @@ class CopyNOAAS3FilesToStagingOperator(BaseOperator):
         self.s3_keys=s3_keys
         self.local_path=local_path 
         self.replace_existing=replace_existing,
-        self.local_path=local_path
 
     def execute(self, context: dict) -> None:
         """ Copy a file from S3 to local staging directory

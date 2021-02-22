@@ -12,10 +12,12 @@ from hooks.s3_hook_local import S3HookLocal
 from airflow.providers.amazon.aws.operators.s3_list import S3ListOperator
 
 from operators.create_tables import CreateTablesOperator
-from operators.copy_noaa_s3_files_to_staging import CopyNOAAS3FilesToStagingOperator
+#from operators.copy_noaa_s3_files_to_staging import CopyNOAAS3FilesToStagingOperator
+#from operators.get_s3file_metadata import GetS3FileMetadata
+from operators.copy_noaa_dim_file_to_staging import CopyNOAADimFileToStagingOperator
+
 from operators.select_from_noaa_s3_to_staging import SelectFromNOAAS3ToStagingOperator
 from operators.local_stage_to_postgres import LocalStageToPostgresOperator
-from operators.get_s3file_metadata import GetS3FileMetadata
 
 
 from helpers.sql_queries import SqlQueries
@@ -25,6 +27,7 @@ AWS_KEY    = os.environ.get('AWS_KEY')
 AWS_SECRET = os.environ.get('AWS_SECRET')
 AWS_REGION = os.environ.get('AWS_REGION', default='eu-central-1')
 
+AIRFLOW_HOME = os.environ.get('AIRFLOW_HOME')
 
 noaa_config = Variable.get("noaa_config", deserialize_json=True)
 noaa_aws_creds = noaa_config['source_params']['aws_credentials']
@@ -32,7 +35,7 @@ noaa_s3_bucket = noaa_config['source_params']['s3_bucket']
 noaa_s3_keys   = noaa_config['source_params']['s3_keys']
 noaa_s3_delim  = noaa_config['source_params']["delimiter"]
 noaa_data_available_from = noaa_config['data_available_from']
-noaa_staging_location = noaa_config['staging_location']
+noaa_staging_location = os.path.join(AIRFLOW_HOME, noaa_config['staging_location'])
 
 
 default_start_date = datetime(year=2021,month=1,day=31)
@@ -76,25 +79,15 @@ with DAG('noaa_dimension_dag',
                                     postgres_create_dim_tables_file)
         )
 
-    # Get metadata for dim- and doc-files listed in
-    # the noaa data class, especially the LastModified info
-    #
-    get_noaa_files_metadata_operator = GetS3FileMetadata(
-        task_id='Get_noaa_files_metadata',
-        s3_bucket = noaa_s3_bucket, #"{{ noaa_bucket }}",
-        s3_prefix = '',
-        s3_keys   = noaa_s3_keys #,"{{ noaa_files }}"
-        )
-
     # Load relevant dimension and documentation files from the
     # NOAA S3 bucket into the local Staging Area (Filesystem)
     #
-    copy_noaa_s3_files_to_staging_operator = CopyNOAAS3FilesToStagingOperator(
-        task_id='Copy_noaa_s3_files_to_staging',
+    copy_noaa_dim_file_to_staging_operator = CopyNOAADimFileToStagingOperator(
+        task_id='Copy_noaa_dim_file_to_staging',
         aws_credentials=noaa_aws_creds,
         s3_bucket=noaa_s3_bucket,
         s3_prefix='',
-        s3_keys=noaa_s3_keys,
+        s3_key=noaa_s3_keys[0],
         replace_existing=True,
         local_path=os.path.join(noaa_staging_location, 'dimensions')
         )
@@ -126,9 +119,8 @@ with DAG('noaa_dimension_dag',
 
 start_operator >> create_noaa_dim_tables_operator
 
-create_noaa_dim_tables_operator >> get_noaa_files_metadata_operator
-get_noaa_files_metadata_operator >> copy_noaa_s3_files_to_staging_operator
-copy_noaa_s3_files_to_staging_operator >> load_noaa_dim_tables_into_postgres_operator
+create_noaa_dim_tables_operator >> copy_noaa_dim_file_to_staging_operator
+copy_noaa_dim_file_to_staging_operator >> load_noaa_dim_tables_into_postgres_operator
 load_noaa_dim_tables_into_postgres_operator >> check_dim_quality_operator
 check_dim_quality_operator >> end_operator
 

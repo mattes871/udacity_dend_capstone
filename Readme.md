@@ -1,10 +1,30 @@
 # Capstone Project
 
+## Note to the Reviewer
+
+Aspiration level of this project is a minimal prototype that demonstrates the
+different skills we learned in this Nanodegree. Hence, I am demonstrating how to
+setup a pipeline using the following tools:
+- Airflow to define and orchestrate the pipeline
+- Amazon S3 as the primary data source
+- Postgresql for defining the data model and storing the intermediate data
+- Postgresql for defining a data mart and storing dashboard/report data
+
+Not in scope of this project is securing the prototype against changes in the
+data and other mistakes that needed to be taken into account for a real
+production system. Hence, I am deliberately skipping all kinds of extras that
+should be included for a proper testing (assert, try/except).  Furthermore, the
+docker-compose approach exhibits some performance issues when using a local
+macOS host. For the sake of simplicity and easy testing, I chose a setup that is
+not optimal in terms of performance but sufficient to demonstrate the project
+(e.g. mounting multiple directories from the local machine into the containers).
+
+
 ## Installing the Repository
 
 Download the repository from Github
 
->
+> git clone 
 
 For this project I decided to use docker to provide a platform agnostic result.
 However, I am aware that the docker implementation for MacOs has some "features"

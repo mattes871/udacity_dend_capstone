@@ -62,6 +62,9 @@ services:
       - webserver
     environment:
       - POSTGRES_PASSWORD=airflow
+      - AWS_KEY=${AWS_KEY}
+      - AWS_SECRET=${AWS_SECRET}
+      - AWS_REGION=${AWS_REGION}
     env_file:
       - airflow.env
     ports:
