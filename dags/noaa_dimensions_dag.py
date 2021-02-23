@@ -16,7 +16,8 @@ from airflow.utils.task_group import TaskGroup
 
 
 from operators.create_tables import CreateTablesOperator
-#from operators.copy_noaa_s3_files_to_staging import CopyNOAAS3FilesToStagingOperator
+from operators.reformat_fixed_width_file import ReformatFixedWidthFileOperator
+##from operators.copy_noaa_s3_files_to_staging import CopyNOAAS3FilesToStagingOperator
 #from operators.get_s3file_metadata import GetS3FileMetadata
 from operators.download_noaa_dim_file_to_staging import DownloadNOAADimFileToStagingOperator
 
@@ -107,45 +108,82 @@ with DAG(DAG_NAME,
     # >>>> Using TaskGroup instead of SubDags
     with TaskGroup("download_noaa_dims") as download_noaa_dims:
         s3_index = 2
-        load_countries = DownloadNOAADimFileToStagingOperator(
+        load_countries_operator = DownloadNOAADimFileToStagingOperator(
             task_id=f'load_{noaa_s3_keys[s3_index][:-4]}_dim_file',
             aws_credentials=noaa_aws_creds,
             s3_bucket=noaa_s3_bucket,
             s3_prefix='',
             s3_key=noaa_s3_keys[s3_index],
             replace_existing=True,
-            local_path=os.path.join(noaa_staging_location, 'dimensions')
+            local_path=os.path.join(noaa_staging_location, 'dimensions_raw')
             )
         s3_index = 3
-        load_inventory = DownloadNOAADimFileToStagingOperator(
+        load_inventory_operator = DownloadNOAADimFileToStagingOperator(
             task_id=f'load_{noaa_s3_keys[s3_index][:-4]}_dim_file',
             aws_credentials=noaa_aws_creds,
             s3_bucket=noaa_s3_bucket,
             s3_prefix='',
             s3_key=noaa_s3_keys[s3_index],
             replace_existing=True,
-            local_path=os.path.join(noaa_staging_location, 'dimensions')
+            local_path=os.path.join(noaa_staging_location, 'dimensions_raw')
             )
         s3_index = 5
-        load_stations = DownloadNOAADimFileToStagingOperator(
+        load_stations_operator = DownloadNOAADimFileToStagingOperator(
             task_id=f'load_{noaa_s3_keys[s3_index][:-4]}_dim_file',
             aws_credentials=noaa_aws_creds,
             s3_bucket=noaa_s3_bucket,
             s3_prefix='',
             s3_key=noaa_s3_keys[s3_index],
             replace_existing=True,
-            local_path=os.path.join(noaa_staging_location, 'dimensions')
+            local_path=os.path.join(noaa_staging_location, 'dimensions_raw')
+            )
+        #load_countries >> [load_inventory, load_stations]
+
+    dummy_operator = DummyOperator(task_id='Channel_execution', dag=dag)
+
+    # Reformat the fixed-width files into a format that Postgresql can deal with
+    #
+    with TaskGroup("reformat_noaa_dims") as reformat_noaa_dims:
+        s3_index = 2
+        reformat_countries_operator = ReformatFixedWidthFileOperator(
+            task_id=f'reformat_{noaa_s3_keys[s3_index][:-4]}_dim_file',
+            filename=noaa_s3_keys[s3_index],
+            local_path_fixed_width=os.path.join(noaa_staging_location, 'dimensions_raw'),
+            local_path_csv=os.path.join(noaa_staging_location, 'dimensions'),
+            column_names=['country_id', 'country'],
+            column_positions=[0, 3],
+            delimiter='|',
+            add_header=False,
+            remove_original_file=False,
             )
 
-    #  copy_noaa_dim_file_to_staging_operator = DownloadNOAADimFileToStagingOperator(
-    #      task_id='Copy_noaa_dim_file_to_staging',
-    #      aws_credentials=noaa_aws_creds,
-    #      s3_bucket=noaa_s3_bucket,
-    #      s3_prefix='',
-    #      s3_key=noaa_s3_keys[0],
-    #      replace_existing=True,
-    #      local_path=os.path.join(noaa_staging_location, 'dimensions')
-    #      )
+        s3_index = 3
+        reformat_inventory_operator = ReformatFixedWidthFileOperator(
+            task_id=f'reformat_{noaa_s3_keys[s3_index][:-4]}_dim_file',
+            filename=noaa_s3_keys[s3_index],
+            local_path_fixed_width=os.path.join(noaa_staging_location, 'dimensions_raw'),
+            local_path_csv=os.path.join(noaa_staging_location, 'dimensions'),
+            column_names=['id', 'latitude','longitude','kpi','from_year','until_year'],
+            column_positions=[0, 11, 20, 30, 35, 40, 45],
+            delimiter='|',
+            add_header=False,
+            remove_original_file=False,
+            )
+
+        s3_index = 5
+        reformat_stations_operator = ReformatFixedWidthFileOperator(
+            task_id=f'reformat_{noaa_s3_keys[s3_index][:-4]}_dim_file',
+            filename=noaa_s3_keys[s3_index],
+            local_path_fixed_width=os.path.join(noaa_staging_location, 'dimensions_raw'),
+            local_path_csv=os.path.join(noaa_staging_location, 'dimensions'),
+            column_names=['id','latitude','longitude','elevation',
+                          'state','name','gsn_flag','hcn_crn_flag','wmo_id'],
+            column_positions=[0, 11, 20, 30, 37, 40, 71, 75, 79, 85],
+            delimiter='|',
+            add_header=False,
+            remove_original_file=False,
+            )
+        #[reformat_countries_operator, reformat_inventory_operator] >> reformat_stations_operator
 
     # In case the data changed, load the NOAA dimension data from csv file on
     # local Staging into the tables prepared on Staging Database (Postgresql)
@@ -170,13 +208,17 @@ with DAG(DAG_NAME,
     end_operator = DummyOperator(task_id='Stop_execution', dag=dag)
 
 
+
+
+
 # ............................................
 # Defining the DAG
 # ............................................
 
 start_operator >> create_noaa_dim_tables_operator
-create_noaa_dim_tables_operator >> download_noaa_dims
-download_noaa_dims >> load_noaa_dim_tables_into_postgres_operator
+create_noaa_dim_tables_operator >> [download_noaa_dims] 
+[download_noaa_dims] >> dummy_operator >> [reformat_noaa_dims] 
+[reformat_noaa_dims] >> load_noaa_dim_tables_into_postgres_operator
 load_noaa_dim_tables_into_postgres_operator >> check_dim_quality_operator
 check_dim_quality_operator >> end_operator
 

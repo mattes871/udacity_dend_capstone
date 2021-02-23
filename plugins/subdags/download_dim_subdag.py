@@ -1,7 +1,7 @@
 import os
 from airflow import DAG
 from datetime import datetime
-from operators.copy_noaa_dim_file_to_staging import CopyNOAADimFileToStagingOperator
+from operators.download_noaa_dim_file_to_staging import DownloadNOAADimFileToStagingOperator
 
 #from airflow.operators.dummy import DummyOperator
 #from airflow.utils.decorators import apply_defaults
@@ -53,7 +53,7 @@ def download_noaa_dim_subdag(parent_dag_name: str, task_id: str,
     )
 
     for s3_key in s3_keys:
-       download_s3_file = CopyNOAADimFileToStagingOperator(
+       download_s3_file = DownloadNOAADimFileToStagingOperator(
             task_id=f'{task_id}.{s3_key[:-4]}',
             aws_credentials=aws_credentials,
             s3_bucket=s3_bucket,

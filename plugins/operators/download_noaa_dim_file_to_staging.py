@@ -1,7 +1,7 @@
 import os
 import boto3
 from dateutil.tz import tzutc
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.models import BaseOperator
 from airflow.utils.decorators import apply_defaults
@@ -94,7 +94,7 @@ class DownloadNOAADimFileToStagingOperator(BaseOperator):
             full_filename = os.path.join(local_path, filename)
             if os.path.exists(full_filename):
                 last_modified_ts = os.path.getmtime(full_filename)
-                last_modified = datetime.utcfromtimestamp(last_modified_ts)
+                last_modified = datetime.fromtimestamp(last_modified_ts,timezone.utc)
             else:
                 last_modified = datetime(1900, 1, 1, 0, 1, 1, tzinfo=tzutc())
             return last_modified
