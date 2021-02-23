@@ -139,6 +139,12 @@ with DAG(DAG_NAME,
             )
         #load_countries >> [load_inventory, load_stations]
 
+    # This dummy_operator is needed to "focus" the *download_noaa_dims* task
+    # group and wait for its completion. Without this operator, each of the
+    # following operators would be triggered after each of the
+    # download_noaa_dims operators, effectively (but wrongly) multiplying the
+    # number of tasks to do.
+    # 
     dummy_operator = DummyOperator(task_id='Channel_execution', dag=dag)
 
     # Reformat the fixed-width files into a format that Postgresql can deal with
@@ -153,7 +159,7 @@ with DAG(DAG_NAME,
             column_names=['country_id', 'country'],
             column_positions=[0, 3],
             delimiter='|',
-            add_header=False,
+            add_header=True,
             remove_original_file=False,
             )
 
@@ -166,7 +172,7 @@ with DAG(DAG_NAME,
             column_names=['id', 'latitude','longitude','kpi','from_year','until_year'],
             column_positions=[0, 11, 20, 30, 35, 40, 45],
             delimiter='|',
-            add_header=False,
+            add_header=True,
             remove_original_file=False,
             )
 
@@ -180,7 +186,7 @@ with DAG(DAG_NAME,
                           'state','name','gsn_flag','hcn_crn_flag','wmo_id'],
             column_positions=[0, 11, 20, 30, 37, 40, 71, 75, 79, 85],
             delimiter='|',
-            add_header=False,
+            add_header=True,
             remove_original_file=False,
             )
         #[reformat_countries_operator, reformat_inventory_operator] >> reformat_stations_operator
