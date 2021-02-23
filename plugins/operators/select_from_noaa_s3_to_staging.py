@@ -40,6 +40,18 @@ class SelectFromNOAAS3ToStagingOperator(BaseOperator):
         self.execution_date=execution_date
         self.real_date=real_date
         self.local_path=local_path  # +"{{ execution_date.year }}"
+        print(f"""SelectFromNOAAS3ToStagingOperator:
+        {self.aws_credentials}
+        {self.s3_bucket}
+        {self.s3_prefix}
+        {self.s3_table_file}
+        {self.most_recent_data_date}
+        {self.execution_date}
+        {self.real_date}
+        {self.local_path}
+        """)
+
+
 
     def execute(self, context: dict) -> None:
         """ Select all records for the **execution_date** day from the

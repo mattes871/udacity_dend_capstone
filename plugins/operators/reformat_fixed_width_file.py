@@ -17,30 +17,42 @@ class ReformatFixedWidthFileOperator(BaseOperator):
     """
 
     ui_color = '"#3399FF'
-    template_fields=[]
+    #template_fields = ("local_path_fixed_width",)
 
     @apply_defaults
     def __init__(self,
-                 filename: str = '',
+                 filename:               str = '',
                  local_path_fixed_width: str = '',
-                 local_path_csv: str = '',
-                 column_names: list = ['all_in_one'],
-                 column_positions: list = [0],
-                 delimiter: str = '|',
-                 add_header: bool = True,
-                 remove_original_file: bool = True,
+                 local_path_csv:         str = '',
+                 column_names:    list = ['all_in_one'],
+                 column_positions:      list = [0],
+                 delimiter:              str = '|',
+                 quote:                  str = '"',
+                 add_header:            bool = True,
+                 remove_original_file:  bool = True,
                  *args, **kwargs):
 
         super(ReformatFixedWidthFileOperator, self).__init__(*args, **kwargs)
-        self.filename=filename
-        self.local_path_fixed_width=local_path_fixed_width,
-        self.local_path_csv=local_path_csv,
-        self.column_names=column_names
-        self.column_positions=column_positions,
-        self.delimiter=delimiter
-        self.add_header=add_header
-        self.remove_original_file=remove_original_file
-
+        self.filename = filename
+        self.local_path_fixed_width, = local_path_fixed_width,
+        self.local_path_csv, = local_path_csv,
+        self.column_names = column_names
+        self.column_positions, = column_positions,
+        self.delimiter = delimiter
+        self.quote = quote
+        self.add_header = add_header
+        self.remove_original_file = remove_original_file
+        print(f"""ReformatFixedWidthFileOperator:
+        {self.filename}
+        {self.local_path_fixed_width}
+        {self.local_path_csv}
+        {self.column_names}
+        {self.column_positions}
+        {self.delimiter}
+        {self.quote}
+        {self.add_header}
+        {self.remove_original_file}
+        """)
 
     def execute(self, context: dict) -> None:
         """ 
@@ -53,6 +65,7 @@ class ReformatFixedWidthFileOperator(BaseOperator):
                           column_names: list,
                           column_positions: list,
                           delimiter: str,
+                          quote: str,
                           remove_original_file: bool,
                           add_header: bool) -> None:
             """
@@ -77,17 +90,23 @@ class ReformatFixedWidthFileOperator(BaseOperator):
             column_positions.append(255)
 
             with open(full_csv_filename, 'w') as f_csv:
-                
+
                 # Add a header line if *add_header*
                 if add_header:
                     self.log.info(f"Adding header to '{full_csv_filename}'")
                     header_line = delimiter.join(column_names)
                     f_csv.write(f'{header_line}\n')
-                
+
+                cp = column_positions
+                len_cp = len(cp)
+                q = quote
                 with open(full_fw_filename, 'r') as f_fw:
                     for line in f_fw:
-                        splits = [line[column_positions[i]:column_positions[i+1]].strip() \
-                                  for i in range(len(column_positions)-1)]
+                        # enclose strings by quotation character
+                        # if the quotation char already occurs in the string,
+                        # escape it by doubling (Postgres way)
+                        splits = [q + line[cp[i]:cp[i+1]].strip().replace(q,q+q) + q\
+                                  for i in range(len_cp-1)]
                         csv_line = delimiter.join(splits)
                         f_csv.write(f'{csv_line}\n')
 
@@ -100,8 +119,9 @@ class ReformatFixedWidthFileOperator(BaseOperator):
 
         # Main execute function body
         self.log.info(f"Executing ReformatFixedWidthFileOperator")
-        reformat_file(self.filename, self.local_path_fixed_width[0],
-                      self.local_path_csv[0], self.column_names,
-                      self.column_positions[0],
-                      self.delimiter, self.remove_original_file,
+        reformat_file(self.filename, self.local_path_fixed_width,
+                      self.local_path_csv, self.column_names,
+                      self.column_positions,
+                      self.delimiter, self.quote, 
+                      self.remove_original_file,
                       self.add_header)

@@ -1,4 +1,4 @@
-DROP TABLE IF EXISTS public.ghcnd_stations_raw ;
+--DROP TABLE IF EXISTS public.ghcnd_stations_raw ;
 CREATE TABLE IF NOT EXISTS public.ghcnd_stations_raw (
     id varchar(11) NOT NULL,
     latitude varchar(9),
@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS public.ghcnd_stations_raw (
     wmo_id varchar(5)
 );
 
-DROP TABLE IF EXISTS public.ghcnd_inventory_raw ;
+--DROP TABLE IF EXISTS public.ghcnd_inventory_raw ;
 CREATE TABLE IF NOT EXISTS public.ghcnd_inventory_raw (
     id varchar(11) NOT NULL,
     latitude varchar(9),
@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS public.ghcnd_inventory_raw (
     until_year varchar(4)
 );
 
-DROP TABLE IF EXISTS public.ghcnd_countries_raw ;
+--DROP TABLE IF EXISTS public.ghcnd_countries_raw ;
 CREATE TABLE IF NOT EXISTS public.ghcnd_countries_raw (
     country_id varchar(2) NOT NULL,
     country varchar(64)

@@ -103,6 +103,7 @@ Setup a workflow that
 - transforms the data into meaningful entities
 - stores the entities in a database
 - performas quality checks on the data
+
 Further requirements:
 - the workflow should be able to backfill past data and data that was missed due to unavailability of the source data.
 - the solution architecture should allow to easily add new data sources into the
@@ -118,15 +119,47 @@ Workflow should be:
 - Run a sample analytics use case to showcase the usefulness of the data
 - Use Airflow for orchestrating the workflow
 
-## Setup the infrastructure
+### Re-Scoping the Project after two weeks
+
+While implementing the Pipeline for the NOAA data source it became apparent that
+one data source alone is more than enough effort for the time available. Hence,
+I decided to rescope the project and restrict it to deal with a single data
+source only and at the same time the project is still complex enough to
+demonstrate the different tools and concepts we learned in this Nanodegree.
+
+## Setting up the infrastructure
+
+### Docker & Docker Compose
+
+Using Docker and 'docker-compose' is a very elegant and convenient way to set up
+development environments with minimum effort and maximum reusability of existing
+components and maximum portability to other hosts. In this project,
+'docker-compose' allowed me to combine a Postgresql 12 database with the newest
+Apache Airflow 2.0 for orchestration of the pipeline.  
+
+It needs to be
+said, however, that the current configuration was set up with ease of
+installation and debugging in minde. It is not optimized for performance or
+intended for production use. 
 
 ### Secrets & Credentials
-All access credentials need to be set/exported in the shell that executes the
-docker-compose up command. 
+For this project, you will need an AWS IAM profile with a *Key* and a *Secret*
+to access the NOAA data resource on Amazon S3.
+To keep things simple and secure, the Key and the Secret need to be set as
+environment variables in your local environment, i.e. in the environment from
+where the `docker-compose up` is executed.  In my project folder, I created a
+*set_environment.sh* script that does
 
-Unfortunately, this is also the reason why the airflow connections use a
-different mechanism for their setup than the airflow variables, which are loaded
-from a .json file.
+> export AWS_KEY='<your-key-here>'
+> export AWS_SECRET='<your-secret-here>'
+
+If you store this as a '.sh'-file, do not forget to exclude this file from git
+(using .gitignore).
+
+The 'docker-compose.yaml' picks these variables up and provides them for use
+inside the docker containers.
+
+No further credentials for external platforms is needed to run the project demo.
 
 
 ### Access to S3 buckets on AWS

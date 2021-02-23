@@ -40,6 +40,16 @@ class DownloadNOAADimFileToStagingOperator(BaseOperator):
         self.s3_key=s3_key
         self.local_path=local_path
         self.replace_existing=replace_existing
+        print(f"""DownloadNOAADimFileToStagingOperator:
+        {self.aws_credentials}
+        {self.s3_bucket}
+        {self.s3_prefix}
+        {self.s3_key}
+        {self.local_path}
+        {self.replace_existing}
+        """)
+
+
 
 
     def execute(self, context: dict) -> None:
@@ -54,7 +64,7 @@ class DownloadNOAADimFileToStagingOperator(BaseOperator):
                                       s3_key: str) -> datetime:
             """ Use local environment variables to access noaa S3 bucket and
                 obtain the last-modified info for *s3_key* 
-                
+
                 Returns: datetime.datetime of s3_key object's LastModified
                          property
                          datetime.datetime(1900,1,1, ....) if the object does not
