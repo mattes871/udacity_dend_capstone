@@ -190,6 +190,17 @@ of SubDAGs.
 
 ## Run ETL to Model the Data
 
+### Catchup and Backfill
+The operators for NOAA fact and dimension data handle catchup and backfill
+by themself. Hence catchup is set to *False*. The operators also take into
+account if any of the runs does not yield new data. The next run will always try
+to load all not yet downloaded data from NOAA.
+
+Every year of NOAA data holds approximately 100MB in gzipped format. Hence, the
+current setup of the project defines the earliest date of NOAA data to be
+downloaded to be 2018-01-01. This can be changed in the 'data_available_from'
+variable of the ./variables/noaa.json file.
+
 
 
 ## Complete Project Write Up

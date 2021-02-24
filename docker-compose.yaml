@@ -1,4 +1,4 @@
-version: "2.2"
+version: "3.8" #"2.2"
 
 volumes:
   postgresql_12_data:

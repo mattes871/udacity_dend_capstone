@@ -1,0 +1,23 @@
+version: "3.8" #"2.2"
+
+volumes:
+  postgresql_12_data:
+  # staging_files:
+  airflow_logs:
+
+services:
+  postgres:
+    image: postgres:12
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    ports:
+        # Host port=5433 because other Postgres is running on 5432
+      - "54322:5432"
+    volumes:
+      # Mount to a local directory instead of a volume
+      # - ./data/postgresqli/data:/var/lib/postgresql/data
+      # Mount to a docker volume for better performance (less caching)
+      - postgresql_12_data:/var/lib/postgresql/data
+

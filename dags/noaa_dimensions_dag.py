@@ -94,7 +94,7 @@ with DAG(DAG_NAME,
           concurrency = 4,
           max_active_runs = 4, # to prevent Airflow from running 
                                # multiple days/hours at the same time
-          schedule_interval = '@once'
+          schedule_interval = '0 0 * * *' # run daily at midnight
         ) as dag:
 
     start_operator = DummyOperator(task_id='Begin_execution', dag=dag)
