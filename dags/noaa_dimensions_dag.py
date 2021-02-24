@@ -23,7 +23,7 @@ from operators.select_from_noaa_s3_to_staging import SelectFromNOAAS3ToStagingOp
 from operators.local_stage_to_postgres import LocalStageToPostgresOperator
 
 
-from helpers.sql_queries import SqlQueries
+# from helpers.sql_queries import SqlQueries
 # from helpers.source_data_class import SourceDataClass
 
 

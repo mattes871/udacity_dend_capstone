@@ -20,26 +20,39 @@ not optimal in terms of performance but sufficient to demonstrate the project
 (e.g. mounting multiple directories from the local machine into the containers).
 
 
-## Installing the Repository
+## Prerequisites 
 
-Download the repository from Github
+### Docker & Docker Compose
+The project uses Docker containers to provide a platform agnostic setup.
+
+To install and run the repository, you need Docker and Docker Compose installed
+on your computer.  The project was implemented and tested with Docker Engine
+v20.10.2 and Docker Compose 1.27.4 on MacOS 10.14.6.
+
+For download and installation instructions checkout for
+[Docker](https://docs.docker.com/engine/install/) 
+and for [Docker Compose](https://docs.docker.com/compose/install/).
+
+### AWS IAM role
+The project downloads data from a public Amazon S3 bucket. In order to access
+the data, an AWS IAM role with access to S3 is required. For the actual access,
+you need the AWS_KEY and the AWS_SECRET.
+
+## Installing the Repository
+When Docker and Docker Compose are installed and running on your system, you can
+download the repository from GitHub:
 
 > git clone 
 
-For this project I decided to use docker to provide a platform agnostic result.
-However, I am aware that the docker implementation for MacOs has some "features"
-in regards to mapping users and access rights that might work differently on
-other Unix systems.
+Before starting docker-compose, you need to define the following environment
+variables: 
 
-After downloading, you need to provide your credentials in for accessing AWS S3:
-Rename the file ./scripts/set_environment-template.sh to set_environment.sh and
-fill in your account information. Be sure to provide the AWS_SECRET_URI as a
-web encoded string!
+> export AWS_KEY='<your-key-here>'
+> export AWS_SECRET='<your-secret-here>'
 
 Once the AWS credentials are provided, go to the main project directory and execute
 
 > docker-compose up
-
 
 This will spawn a postgres database, the airflow webserver and the scheduler.
 
@@ -120,7 +133,6 @@ Workflow should be:
 - Use Airflow for orchestrating the workflow
 
 ### Re-Scoping the Project after two weeks
-
 While implementing the Pipeline for the NOAA data source it became apparent that
 one data source alone is more than enough effort for the time available. Hence,
 I decided to rescope the project and restrict it to deal with a single data
@@ -130,17 +142,15 @@ demonstrate the different tools and concepts we learned in this Nanodegree.
 ## Setting up the infrastructure
 
 ### Docker & Docker Compose
-
 Using Docker and 'docker-compose' is a very elegant and convenient way to set up
 development environments with minimum effort and maximum reusability of existing
 components and maximum portability to other hosts. In this project,
 'docker-compose' allowed me to combine a Postgresql 12 database with the newest
 Apache Airflow 2.0 for orchestration of the pipeline.  
 
-It needs to be
-said, however, that the current configuration was set up with ease of
-installation and debugging in minde. It is not optimized for performance or
-intended for production use. 
+It needs to be said, however, that the current configuration was set up with
+ease of installation and debugging in minde. It is not optimized for performance
+or intended for production use. 
 
 ### Secrets & Credentials
 For this project, you will need an AWS IAM profile with a *Key* and a *Secret*
@@ -163,20 +173,24 @@ No further credentials for external platforms is needed to run the project demo.
 
 
 ### Access to S3 buckets on AWS
-see former projects
+The NOAA data resides on Amazon S3 and requires an AWS IAM account for
+retrieval. In order to limit the data transfer, the operators for downloading
+dimension and fact data from NOAA use mechanisms to check whether more recent
+data is available on NOAA - compared to the local downloads.
 
-### Setup workflow management with Airflow
-
-I chose Airflow for the management of the workflow. In order to make the code as
-easy to transfer as possible, Airflow and its components (database, scheduler,
-webserver) are containerized.
-
+### Orchestrating workflow management with Airflow
+Airflow is one of the standard frameworks for orchestrating workflows in data
+engineering. I chose Airflow 2.0 for this project to take advantage of the newly
+introduced TaskGroup concept, which offers significant upsides  over the usage
+of SubDAGs. 
 
 ## Explore and Assess the Data
 
 ## Define the Data Model
 
 ## Run ETL to Model the Data
+
+
 
 ## Complete Project Write Up
 

@@ -3,17 +3,16 @@ import os
 from airflow import DAG
 from airflow.operators.dummy import DummyOperator
 from airflow.operators.python import PythonOperator
-from airflow.models import Variable
-#from airflow.providers.amazon.aws.hooks.s3 import S3Hook
-from airflow.providers.postgres.operators.postgres import PostgresOperator
+# from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+# from airflow.providers.postgres.operators.postgres import PostgresOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
+from airflow.models import Variable
 
 from operators.create_tables import CreateTablesOperator
-#from operators.copy_noaa_s3_files_to_staging import CopyNOAAS3FilesToStagingOperator
 from operators.select_from_noaa_s3_to_staging import SelectFromNOAAS3ToStagingOperator
 from operators.local_stage_to_postgres import LocalStageToPostgresOperator
 
-from helpers.sql_queries import SqlQueries
+# from helpers.sql_queries import SqlQueries
 # from helpers.source_data_class import SourceDataClass
 AWS_KEY    = os.environ.get('AWS_KEY')
 AWS_SECRET = os.environ.get('AWS_SECRET')
