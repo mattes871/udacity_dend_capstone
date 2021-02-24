@@ -4,7 +4,7 @@ from datetime import date, datetime
 from hooks.s3_hook_local import S3HookLocal
 from airflow.models import BaseOperator
 from airflow.utils.decorators import apply_defaults
-from operators.copy_noaa_s3_files_to_staging import CopyNOAAS3FilesToStagingOperator
+from operators.download_s3_file_to_staging import DownloadS3FileToStagingOperator
 
 class SelectFromNOAAS3ToStagingOperator(BaseOperator):
     """ Select records for a specific day from the
@@ -21,14 +21,14 @@ class SelectFromNOAAS3ToStagingOperator(BaseOperator):
 
     @apply_defaults
     def __init__(self,
-                 aws_credentials='',
-                 s3_bucket='',
-                 s3_prefix='',
-                 s3_table_file='',
-                 most_recent_data_date='',
-                 execution_date='',
-                 real_date='',
-                 local_path='',
+                 aws_credentials: str = '',
+                 s3_bucket: str = '',
+                 s3_prefix: str = '',
+                 s3_table_file:  str = '',
+                 most_recent_data_date: str = '',
+                 execution_date: str = '',
+                 real_date:  str = '',
+                 local_path: str = '',
                  *args, **kwargs):
 
         super(SelectFromNOAAS3ToStagingOperator, self).__init__(*args, **kwargs)
@@ -54,27 +54,28 @@ class SelectFromNOAAS3ToStagingOperator(BaseOperator):
 
 
     def execute(self, context: dict) -> None:
-        """ Select all records for the **execution_date** day from the
-            NOAA s3_table_file on Amazon S3 and store the records
-            as a csv file on the local staging area under
-            <local_path>/<real_date>
-            If more than one csv file is created, all of them will be
-            in the same directory  just different file name
+        """ 
+        Select all records for the **execution_date** day from the NOAA
+        s3_table_file on Amazon S3 and store the records as a csv file on the
+        local staging area under <local_path>/<real_date> If more than one csv
+        file is created, all of them will be in the same directory  just
+        different file name
         """
 
 
         def load_full_year(year: int, context: dict) -> None:
-            """ Uses CopyNOAAS3FileToStagingOperator to download
-                full *year* csv.gz file from the NOAA archive onto
-                the Staging Area
+            """ 
+            Uses DownloadS3FileToStagingOperator to download full *year* csv.gz
+            file from the NOAA archive onto the Staging Area
             """
-            CopyNOAAS3FilesToStagingOperator(
+            DownloadS3FileToStagingOperator(
                 task_id='Copy_noaa_s3_fact_file_to_staging',
                 aws_credentials=self.aws_credentials,
                 s3_bucket=self.s3_bucket,
                 s3_prefix='csv.gz',
-                s3_files=[f'{year}.csv.gz'],
-                local_path=self.local_path
+                s3_key=f'{year}.csv.gz',
+                local_path=self.local_path,
+                replace_existing=True
                 ).execute(context)
 
 
@@ -87,10 +88,10 @@ class SelectFromNOAAS3ToStagingOperator(BaseOperator):
         # Make sure path for local staging exists
         most_recent_data_year = datetime.strptime(self.most_recent_data_date,
                                                   '%Y%m%d').year
-        execution_date_year=datetime.strptime(self.execution_date,
-                                              '%Y%m%d').year
+        execution_date_year = datetime.strptime(self.execution_date,
+                                                '%Y%m%d').year
         if not os.path.exists(self.local_path):
-            self.log.info(f'Create Staging Location Folder')
+            self.log.info(f"Create Staging Location Folder '{self.local_path}'")
             os.makedirs(self.local_path)
 
         # Check if we need to backfill past years. In the NOAA
@@ -116,32 +117,23 @@ class SelectFromNOAAS3ToStagingOperator(BaseOperator):
         # >>>>      records need to be loaded from different file
         #
             where_clause = f"where s._2 >= '{self.most_recent_data_date.strftime('%Y%m%d')}'"
-            self.log.info(f"""select s._1 as id,
-                                      s._2 as date_,
-                                      s._3 as element,
-                                      s._4 as data_value,
-                                      s._5 as m_flag,
-                                      s._6 as q_flag,
-                                      s._7 as s_flag,
-                                      s._8 as observ_time
-                               from s3object s
-                               {where_clause}
-                               limit 32""")
+            f_sql = f"""select s._1 as id,
+                               s._2 as date_,
+                               s._3 as element,
+                               s._4 as data_value,
+                               s._5 as m_flag,
+                               s._6 as q_flag,
+                               s._7 as s_flag,
+                               s._8 as observ_time
+                        from s3object s
+                        {where_clause}
+                        """
+            self.log.info(f_sql)
             result = s3_hook.select_key(
-                key=f'{self.s3_prefix}/{self.s3_table_file}',
-                bucket_name=f'{self.s3_bucket}',
-                expression=f"""select s._1 as id,
-                                      s._2 as date_,
-                                      s._3 as element,
-                                      s._4 as data_value,
-                                      s._5 as m_flag,
-                                      s._6 as q_flag,
-                                      s._7 as s_flag,
-                                      s._8 as observ_time
-                               from s3object s
-                               {where_clause}
-                               limit 32""",
-                input_serialization={
+                key = f'{self.s3_prefix}/{self.s3_table_file}',
+                bucket_name = f'{self.s3_bucket}',
+                expression  = f_sql,
+                input_serialization = {
                     'CSV': {
                            'FileHeaderInfo': 'NONE',
                            'FieldDelimiter': ','

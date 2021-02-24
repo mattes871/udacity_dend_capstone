@@ -17,12 +17,12 @@
                        "mingle-list.txt",
                        "readme.txt",
                        "status.txt"],
-            "s3_prefixes": ["csv","csv.gz"],
+            "s3_fact_prefix": "csv.gz",
             "fact_format": "csv",
-            "compression": "gzip",
-            "delimiter": ","
+            "fact_compression": "gzip",
+            "fact_delimiter": ","
         },
-        "data_available_from": "2019-01-01",
+        "data_available_from": "20190101",
         "staging_location": "./staging_files/noaa",
         "version": "v2021-02-20"
     }

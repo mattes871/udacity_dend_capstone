@@ -1,6 +1,7 @@
 import os
 import glob
 import gzip, shutil
+from datetime import datetime
 from airflow.contrib.hooks.aws_hook import AwsHook
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.models import BaseOperator
@@ -90,19 +91,22 @@ class LocalStageToPostgresOperator(BaseOperator):
             )
             self.log.info(f'Execute SQL: \n{f_sql}')
             # Unzip file to temporary location if gzipped
+            # Make sure to write somewhere we write-permission
             if self.gzipped:
+                tmp_filename = f'{csv_file}__{int(datetime.today().timestamp())}.tmp'
+
                 self.log.info(f'Unzipping {csv_file}')
-                with gzip.open(csv_file, 'rb') as f_in:
-                    with open('tmp.csv', 'wb') as f_out:
+                with open(tmp_filename, 'wb') as f_out:
+                    with gzip.open(csv_file, 'rb') as f_in:
                         shutil.copyfileobj(f_in, f_out)
-                csv_file = 'tmp.csv'
+                csv_file = tmp_filename
             # copy_expert to import from a local file
             self.log.info(f'Importing from {csv_file}')
             result = postgres.copy_expert(f_sql, csv_file)
             # If file was unzipped to a temp file, remove the temp file
             if self.gzipped:
-                self.log.info(f'Removing tmp.csv')
-                os.remove('tmp.csv')
+                self.log.info(f"Removing '{tmp_filename}'")
+                os.remove(tmp_filename)
             self.log.info(f'Result: {result}')
             return result
 

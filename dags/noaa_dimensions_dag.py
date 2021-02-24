@@ -3,12 +3,12 @@ import os
 
 from airflow import DAG
 from airflow.operators.dummy import DummyOperator
-from airflow.operators.python import PythonOperator
 from airflow.models import Variable
-from airflow.providers.postgres.operators.postgres import PostgresOperator
-from airflow.providers.postgres.hooks.postgres import PostgresHook
-#from airflow.providers.amazon.aws.hooks.s3 import S3Hook
-from hooks.s3_hook_local import S3HookLocal
+# from airflow.operators.python import PythonOperator
+# from airflow.providers.postgres.operators.postgres import PostgresOperator
+# from airflow.providers.postgres.hooks.postgres import PostgresHook
+# from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+# from hooks.s3_hook_local import S3HookLocal
 
 # from airflow.operators.subdag import SubDagOperator
 # from subdags.download_dim_subdag import download_noaa_dim_subdag
@@ -17,16 +17,14 @@ from airflow.utils.task_group import TaskGroup
 
 from operators.create_tables import CreateTablesOperator
 from operators.reformat_fixed_width_file import ReformatFixedWidthFileOperator
-##from operators.copy_noaa_s3_files_to_staging import CopyNOAAS3FilesToStagingOperator
-#from operators.get_s3file_metadata import GetS3FileMetadata
 from operators.download_noaa_dim_file_to_staging import DownloadNOAADimFileToStagingOperator
-
+#from operators.download_s3_file_to_staging import DownloadS3FileToStagingOperator
 from operators.select_from_noaa_s3_to_staging import SelectFromNOAAS3ToStagingOperator
 from operators.local_stage_to_postgres import LocalStageToPostgresOperator
 
 
 from helpers.sql_queries import SqlQueries
-from helpers.source_data_class import SourceDataClass
+# from helpers.source_data_class import SourceDataClass
 
 
 AWS_KEY    = os.environ.get('AWS_KEY')
@@ -37,23 +35,43 @@ AIRFLOW_HOME = os.environ.get('AIRFLOW_HOME')
 
 ## noaa_config needs to be defined when starting Airflow
 ## Definition resides in ./variables/noaa.json
+#
+#  Define all required noaa config parameters here
+#  because access to the airflow Variables via "Variables.get"
+#  accesses the Airflow metadata database.
 noaa_config = Variable.get("noaa_config", deserialize_json=True)
-noaa_aws_creds = noaa_config['source_params']['aws_credentials']
-noaa_s3_bucket = noaa_config['source_params']['s3_bucket']
-noaa_s3_keys   = noaa_config['source_params']['s3_keys']
-noaa_s3_delim  = noaa_config['source_params']["delimiter"]
-noaa_data_available_from = noaa_config['data_available_from']
-noaa_staging_location = os.path.join(AIRFLOW_HOME, noaa_config['staging_location'])
+NOAA_AWS_CREDS = noaa_config['source_params']['aws_credentials']
+NOAA_S3_BUCKET = noaa_config['source_params']['s3_bucket']
+NOAA_S3_KEYS   = noaa_config['source_params']['s3_keys']
+NOAA_S3_FACT_DELIM  = noaa_config['source_params']['fact_delimiter']
+NOAA_DATA_AVAILABLE_FROM = noaa_config['data_available_from']
+NOAA_STAGING_LOCATION = os.path.join(AIRFLOW_HOME, noaa_config['staging_location'])
 
-noaa_staging_dim_raw = os.path.join(noaa_staging_location,'dimensions_raw')
-noaa_staging_dim_csv = os.path.join(noaa_staging_location,'dimensions_csv')
-noaa_quotation_char = f'"'
+NOAA_S3_DIM_DELIM = '|'
+NOAA_STAGING_DIM_RAW = os.path.join(NOAA_STAGING_LOCATION,'dimensions_raw')
+NOAA_STAGING_DIM_CSV = os.path.join(NOAA_STAGING_LOCATION,'dimensions_csv')
+NOAA_QUOTATION_CHAR = '"'
 
 default_start_date = datetime(year=2021,month=1,day=31)
 
 ## 'postgres' is the name of the Airflow Connection to the Postgresql 
-postgres_staging_conn_id = 'postgres'
-postgres_create_dim_tables_file = 'dags/sql/create_dim_tables.sql'
+POSTGRES_STAGING_CONN_ID = os.environ.get('POSTGRES_HOST')
+POSTGRES_CREATE_DIM_TABLES_FILE = 'dags/sql/create_dim_tables.sql'
+
+print(f"""Environment for noaa_dimensions_dag:
+NOAA_AWS_CREDS: {NOAA_AWS_CREDS}
+NOAA_S3_BUCKET: {NOAA_S3_BUCKET}
+NOAA_S3_KEYS: {NOAA_S3_KEYS}
+NOAA_S3_FACT_DELIM: {NOAA_S3_FACT_DELIM} 
+NOAA_DATA_AVAILABLE_FROM: {NOAA_DATA_AVAILABLE_FROM} 
+NOAA_STAGING_LOCATION: {NOAA_STAGING_LOCATION}
+NOAA_S3_DIM_DELIM: {NOAA_S3_DIM_DELIM}
+NOAA_STAGING_DIM_RAW: {NOAA_STAGING_DIM_RAW}
+NOAA_STAGING_DIM_CSV: {NOAA_STAGING_DIM_CSV}
+NOAA_QUOTATION_CHAR: {NOAA_QUOTATION_CHAR}
+POSTGRES_STAGING_CONN_ID: {POSTGRES_STAGING_CONN_ID}
+POSTGRES_CREATE_DIM_TABLES_FILE: {POSTGRES_CREATE_DIM_TABLES_FILE} 
+""")
 
 default_args = {
     'owner': 'matkir',
@@ -79,18 +97,15 @@ with DAG(DAG_NAME,
           schedule_interval = '@once'
         ) as dag:
 
-    execution_date = "{{ ds_nodash }}"
-
     start_operator = DummyOperator(task_id='Begin_execution', dag=dag)
 
     # Create NOAA dimension tables in Staging Database (Postgresql)
     #
     create_noaa_dim_tables_operator = CreateTablesOperator(
         task_id = 'Create_noaa_dim_tables',
-        postgres_conn_id = postgres_staging_conn_id,
-        sql_query_file = os.path.join(os.environ.get('AIRFLOW_HOME','.'),
-                                    postgres_create_dim_tables_file),
-        dag = dag
+        postgres_conn_id = POSTGRES_STAGING_CONN_ID,
+        sql_query_file = os.path.join(AIRFLOW_HOME,
+                                      POSTGRES_CREATE_DIM_TABLES_FILE),
         )
 
     # Load relevant dimension and documentation files from the
@@ -103,47 +118,46 @@ with DAG(DAG_NAME,
     #      subdag=download_noaa_dim_subdag(
     #          parent_dag_name=DAG_NAME,
     #          task_id='Noaa_dim_s3_to_staging',
-    #          aws_credentials=noaa_aws_creds,
-    #          s3_bucket=noaa_s3_bucket,
+    #          aws_credentials=NOAA_AWS_CREDS,
+    #          s3_bucket=NOAA_S3_BUCKET,
     #          s3_prefix='',
-    #          s3_keys=[noaa_s3_keys[i] for i in [2,3,5]],
+    #          s3_keys=[NOAA_S3_KEYS[i] for i in [2,3,5]],
     #          replace_existing=True,
     #          local_path=os.path.join(noaa_staging_location, 'dimensions')
     #          ),
-    #      dag=dag
     #      )
     # >>>> Using TaskGroup instead of SubDags
     with TaskGroup("download_noaa_dims") as download_noaa_dims:
         s3_index = 2
         download_noaa_countries_operator = DownloadNOAADimFileToStagingOperator(
             # [:-4]: remove last four characters, i.e. file suffix '.txt'
-            task_id = f'Download_{noaa_s3_keys[s3_index][:-4]}_dim_file',
-            aws_credentials = noaa_aws_creds,
-            s3_bucket = noaa_s3_bucket,
+            task_id = f'Download_{NOAA_S3_KEYS[s3_index][:-4]}_dim_file',
+            aws_credentials = NOAA_AWS_CREDS,
+            s3_bucket = NOAA_S3_BUCKET,
             s3_prefix = '',
-            s3_key = noaa_s3_keys[s3_index],
+            s3_key = NOAA_S3_KEYS[s3_index],
             replace_existing = True,
-            local_path = os.path.join(noaa_staging_location, 'dimensions_raw')
+            local_path = NOAA_STAGING_DIM_RAW
             )
         s3_index = 3
         download_noaa_inventory_operator = DownloadNOAADimFileToStagingOperator(
-            task_id = f'Download_{noaa_s3_keys[s3_index][:-4]}_dim_file',
-            aws_credentials = noaa_aws_creds,
-            s3_bucket = noaa_s3_bucket,
+            task_id = f'Download_{NOAA_S3_KEYS[s3_index][:-4]}_dim_file',
+            aws_credentials = NOAA_AWS_CREDS,
+            s3_bucket = NOAA_S3_BUCKET,
             s3_prefix = '',
-            s3_key = noaa_s3_keys[s3_index],
+            s3_key = NOAA_S3_KEYS[s3_index],
             replace_existing = True,
-            local_path = os.path.join(noaa_staging_location, 'dimensions_raw')
+            local_path = NOAA_STAGING_DIM_RAW
             )
         s3_index = 5
         download_noaa_stations_operator = DownloadNOAADimFileToStagingOperator(
-            task_id = f'Download_{noaa_s3_keys[s3_index][:-4]}_dim_file',
-            aws_credentials = noaa_aws_creds,
-            s3_bucket = noaa_s3_bucket,
+            task_id = f'Download_{NOAA_S3_KEYS[s3_index][:-4]}_dim_file',
+            aws_credentials = NOAA_AWS_CREDS,
+            s3_bucket = NOAA_S3_BUCKET,
             s3_prefix = '',
-            s3_key = noaa_s3_keys[s3_index],
+            s3_key = NOAA_S3_KEYS[s3_index],
             replace_existing = True,
-            local_path = os.path.join(noaa_staging_location, 'dimensions_raw')
+            local_path = NOAA_STAGING_DIM_RAW
             )
         #load_countries >> [load_inventory, load_stations]
 
@@ -159,43 +173,43 @@ with DAG(DAG_NAME,
     with TaskGroup("reformat_noaa_dims") as reformat_noaa_dims:
         s3_index = 2
         reformat_noaa_countries_operator = ReformatFixedWidthFileOperator(
-            task_id = f'Reformat_{noaa_s3_keys[s3_index][:-4]}_dim_file',
-            filename = noaa_s3_keys[s3_index],
-            local_path_fixed_width = noaa_staging_dim_raw, 
-            local_path_csv = noaa_staging_dim_csv,
+            task_id = f'Reformat_{NOAA_S3_KEYS[s3_index][:-4]}_dim_file',
+            filename = NOAA_S3_KEYS[s3_index],
+            local_path_fixed_width = NOAA_STAGING_DIM_RAW, 
+            local_path_csv = NOAA_STAGING_DIM_CSV,
             column_names = ['country_id', 'country'],
             column_positions = [0, 3],
-            delimiter = '|',
-            quote = f'{noaa_quotation_char}',
+            delimiter = f'{NOAA_S3_DIM_DELIM}',
+            quote = f'{NOAA_QUOTATION_CHAR}',
             add_header = True,
             remove_original_file = False,
             )
 
         s3_index = 3
         reformat_noaa_inventory_operator = ReformatFixedWidthFileOperator(
-            task_id = f'Reformat_{noaa_s3_keys[s3_index][:-4]}_dim_file',
-            filename = noaa_s3_keys[s3_index],
-            local_path_fixed_width = noaa_staging_dim_raw,
-            local_path_csv = noaa_staging_dim_csv,
+            task_id = f'Reformat_{NOAA_S3_KEYS[s3_index][:-4]}_dim_file',
+            filename = NOAA_S3_KEYS[s3_index],
+            local_path_fixed_width = NOAA_STAGING_DIM_RAW,
+            local_path_csv = NOAA_STAGING_DIM_CSV,
             column_names = ['id', 'latitude','longitude','kpi','from_year','until_year'],
             column_positions = [0, 11, 20, 30, 35, 40],
-            delimiter = '|',
-            quote = f'{noaa_quotation_char}',
+            delimiter = f'{NOAA_S3_DIM_DELIM}',
+            quote = f'{NOAA_QUOTATION_CHAR}',
             add_header = True,
             remove_original_file = False,
             )
 
         s3_index = 5
         reformat_noaa_stations_operator = ReformatFixedWidthFileOperator(
-            task_id = f'Reformat_{noaa_s3_keys[s3_index][:-4]}_dim_file',
-            filename = noaa_s3_keys[s3_index],
-            local_path_fixed_width = noaa_staging_dim_raw,
-            local_path_csv = noaa_staging_dim_csv,
+            task_id = f'Reformat_{NOAA_S3_KEYS[s3_index][:-4]}_dim_file',
+            filename = NOAA_S3_KEYS[s3_index],
+            local_path_fixed_width = NOAA_STAGING_DIM_RAW,
+            local_path_csv = NOAA_STAGING_DIM_CSV,
             column_names = ['id','latitude','longitude','elevation',
                           'state','name','gsn_flag','hcn_crn_flag','wmo_id'],
             column_positions = [0, 11, 20, 30, 37, 40, 71, 75, 79],
-            delimiter = '|',
-            quote = f'{noaa_quotation_char}',
+            delimiter = f'{NOAA_S3_DIM_DELIM}',
+            quote = f'{NOAA_QUOTATION_CHAR}',
             add_header = True,
             remove_original_file = False,
             )
@@ -215,58 +229,53 @@ with DAG(DAG_NAME,
     with TaskGroup("import_noaa_dims") as import_noaa_dims:
         s3_index = 2
         import_noaa_country_operator = LocalStageToPostgresOperator( 
-            task_id = f'Import_{noaa_s3_keys[s3_index][:-4]}_into_postgres',
-            postgres_conn_id = postgres_staging_conn_id,
+            task_id = f'Import_{NOAA_S3_KEYS[s3_index][:-4]}_into_postgres',
+            postgres_conn_id = POSTGRES_STAGING_CONN_ID,
             table = 'public.ghcnd_countries_raw',
-            delimiter = '|',
-            quote = f'{noaa_quotation_char}',
+            delimiter = f'{NOAA_S3_DIM_DELIM}',
+            quote = f'{NOAA_QUOTATION_CHAR}',
             truncate_table = True,
-            local_path = noaa_staging_dim_csv,
-            file_pattern = f'{noaa_s3_keys[s3_index]}',
-            gzipped = False,
-            dag = dag
+            local_path = NOAA_STAGING_DIM_CSV,
+            file_pattern = f'{NOAA_S3_KEYS[s3_index]}',
+            gzipped = False
             )
         s3_index = 3
         import_noaa_inventory_operator = LocalStageToPostgresOperator( 
-            task_id = f'Import_{noaa_s3_keys[s3_index][:-4]}_into_postgres',
-            postgres_conn_id = postgres_staging_conn_id,
+            task_id = f'Import_{NOAA_S3_KEYS[s3_index][:-4]}_into_postgres',
+            postgres_conn_id = POSTGRES_STAGING_CONN_ID,
             table = 'public.ghcnd_inventory_raw',
-            delimiter = '|',
-            quote = f'{noaa_quotation_char}',
+            delimiter = f'{NOAA_S3_DIM_DELIM}',
+            quote = f'{NOAA_QUOTATION_CHAR}',
             truncate_table = True,
-            local_path = noaa_staging_dim_csv,
-            file_pattern = f'{noaa_s3_keys[s3_index]}',
-            gzipped = False,
-            dag = dag
+            local_path = NOAA_STAGING_DIM_CSV,
+            file_pattern = f'{NOAA_S3_KEYS[s3_index]}',
+            gzipped = False
             )
         s3_index = 5 
         import_noaa_stations_operator = LocalStageToPostgresOperator( 
-            task_id = f'Import_{noaa_s3_keys[s3_index][:-4]}_into_postgres',
-            postgres_conn_id = postgres_staging_conn_id,
+            task_id = f'Import_{NOAA_S3_KEYS[s3_index][:-4]}_into_postgres',
+            postgres_conn_id = POSTGRES_STAGING_CONN_ID,
             table = 'public.ghcnd_stations_raw',
-            delimiter = '|',
-            quote = f'{noaa_quotation_char}',
+            delimiter = f'{NOAA_S3_DIM_DELIM}',
+            quote = f'{NOAA_QUOTATION_CHAR}',
             truncate_table = True,
-            local_path = noaa_staging_dim_csv,
-            file_pattern = f'{noaa_s3_keys[s3_index]}',
-            gzipped = False,
-            dag = dag
+            local_path = NOAA_STAGING_DIM_CSV,
+            file_pattern = f'{NOAA_S3_KEYS[s3_index]}',
+            gzipped = False
             )
 
     # Add Index to tables in order to speed up quality checks as well as later
     # transformation and joins
     #
     add_index_to_dim_tables_operator = DummyOperator(
-        task_id = 'Add_index_to_dim_tables',
-        dag = dag
+        task_id = 'Add_index_to_dim_tables'
         )
 
 
     # Run quality checks on dimension data
     #
     check_dim_quality_operator = DummyOperator(
-        task_id = 'Check_dim_quality',
-        dag = dag
+        task_id = 'Check_dim_quality'
     )
 
     end_operator = DummyOperator(task_id='Stop_execution', dag=dag)

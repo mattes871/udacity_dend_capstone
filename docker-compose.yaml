@@ -31,6 +31,7 @@ services:
       - POSTGRES_USER=airflow
       - POSTGRES_DB=airflow
       - POSTGRES_PASSWORD=airflow
+      - POSTGRES_HOST=postgres
       - AWS_KEY=${AWS_KEY}
       - AWS_SECRET=${AWS_SECRET}
       - AWS_SECRET_URI=${AWS_SECRET_URI}
@@ -61,7 +62,10 @@ services:
       - postgres
       - webserver
     environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_DB=airflow
       - POSTGRES_PASSWORD=airflow
+      - POSTGRES_HOST=postgres
       - AWS_KEY=${AWS_KEY}
       - AWS_SECRET=${AWS_SECRET}
       - AWS_REGION=${AWS_REGION}
