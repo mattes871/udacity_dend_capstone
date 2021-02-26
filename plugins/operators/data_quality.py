@@ -4,30 +4,29 @@ from airflow.utils.decorators import apply_defaults
 
 class DataQualityOperator(BaseOperator):
 
-    ui_color = '#89DA59'
+    ui_color = '#33AA66'
 
     @apply_defaults
     def __init__(self,
-                 redshift_conn_id = '',
-                 dq_checks = [],
+                 postgres_conn_id: str = '',
+                 dq_checks: list = [],
                  *args, **kwargs):
 
         super(DataQualityOperator, self).__init__(*args, **kwargs)
-        self.redshift_conn_id = redshift_conn_id
+        self.postgres_conn_id = postgres_conn_id
         self.dq_checks = dq_checks
 
-    def execute(self, context):
+    def execute(self, context: dict) -> None:
         """
-          Execute the data quality checks provided in 'dq_checks'
-          Each entry is a dictionary with key-value pairs for
-          'sql': SQL string whose execution delivers a number
-          'expected': True, if the 'value' (see below) describes the expected result (=pass)
-                      False, if 'value' indicates an error
-          'value': The value the sql-result is compared against
+        Execute the data quality checks provided in 'dq_checks'
+        Each entry is a dictionary with key-value pairs for
+        'sql': SQL string whose execution delivers a number
+        'expected': True, if the 'value' (see below) describes the expected result (=pass)
+                  False, if 'value' indicates an error
+        'value': The value the sql-result is compared against
         """
-
         self.log.info(f'Executing DataQualityOperator')
-        redshift = PostgresHook(postgres_conn_id=self.redshift_conn_id)
+        redshift = PostgresHook(postgres_conn_id=self.postgres_conn_id)
 
         for dq_check in self.dq_checks:
             sql = dq_check['sql']

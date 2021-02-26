@@ -14,12 +14,14 @@ from airflow.operators.python import PythonOperator
 from airflow.providers.postgres.operators.postgres import PostgresOperator
 
 from operators.create_tables import CreateTablesOperator
+from operators.data_quality import DataQualityOperator
 from operators.reformat_fixed_width_file import ReformatFixedWidthFileOperator
 from operators.download_noaa_dim_file_to_staging import DownloadNOAADimFileToStagingOperator
 from operators.select_from_noaa_s3_to_staging import SelectFromNOAAS3ToStagingOperator
 from operators.local_stage_to_postgres import LocalStageToPostgresOperator
 
 from helpers.sql_queries import SqlQueries
+from helpers.data_quality_checks import DataQualityChecks
 
 
 AWS_KEY    = os.environ.get('AWS_KEY')
@@ -301,9 +303,11 @@ with DAG(NOAA_DAG_NAME,
                 )
 
         # Run quality checks on dimension data
-        check_dim_quality_operator = DummyOperator(
-            task_id = 'Check_dim_quality'
-        )
+        check_dim_quality_operator = DataQualityOperator(
+            task_id='Check_dim_quality',
+            postgres_conn_id = POSTGRES_STAGING_CONN_ID,
+            dq_checks = DataQualityChecks.dq_checks_dim,
+            )
 
         with TaskGroup("Load_dims_into_production") as load_dims_into_production:
             # Transfer raw tables to production tables
@@ -379,7 +383,11 @@ with DAG(NOAA_DAG_NAME,
             )
 
         # Run quality checks on raw fact data
-        check_fact_quality_operator = DummyOperator(task_id='Check_fact_quality')
+        check_fact_quality_operator = DataQualityOperator(
+            task_id='Check_fact_quality',
+            postgres_conn_id = POSTGRES_STAGING_CONN_ID,
+            dq_checks = DataQualityChecks.dq_checks_facts,
+            )
 
         # Finally, insert quality-checked data from Postgres Staging
         # into the "production" database
@@ -398,9 +406,6 @@ with DAG(NOAA_DAG_NAME,
 
 
     end_operator = DummyOperator(task_id='Stop_execution', dag=dag)
-
-
-
 
 
 # ............................................

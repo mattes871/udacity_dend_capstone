@@ -191,6 +191,7 @@ of SubDAGs.
 
 ## Explore and Assess the Data
 
+
 ## Define the Data Model
 The idea behind the data model is to allow an integration of different
 climate-related data sources.  While the time in this project was not sufficient
@@ -201,12 +202,15 @@ a) different data sources can be tracked and
 
 b) (potentially unnecessary) detail is removed
 
+The definition for the staging tables as well as the production tables is found
+in [create_dim_tables.sql](./dags/sql/create_dim_tables.sql) and [create_fact_tables.sql](./dags/sql/create_fact_tables.sql) 
 
-## Run ETL to Model the Data
-The pipeline itself uses four stages:
 
-#### The data source platform 
-In our example, this is the NOAA AWS S3 bucket.
+## Data Platforms & Stages
+The pipeline uses four stages:
+
+#### The data source 
+In our example, this is the NOAA bucket on Amazon S3.
 
 #### A local staging area for downloading the data
 I chose an ordinary file system for the sake of costs and simplicity.
@@ -222,22 +226,50 @@ while already having the "support" of the database functionality.
 A production schema that contains the transformed and quality-checked data that
 is ready for use in production applications.
 
-## The ETL Pipeline
+## The ETL Pipeline in Airflow 2.0
+The main workflow is defined as a single DAG ('noaa_dag') using TaskGroups to
+structure the different sub tasks. The DAG runs all steps from preparing the
+staging and production areas, downloading the source data from S3 to storing the
+cleansed and transformed production-ready data in the database.
 
+### Schedules
+The scheduler is set to run daily around midnight by default but the DAG can
+handle other intervals, too. Even though intra-daily would not make sense as the
+NOAA server provides data only on a daily schedule.
 
-
-### Catchup and Backfill
+### Catchup and Backfills
 The operators for NOAA fact and dimension data handle catchup and backfill
-by themself. Hence catchup is set to *False*. The operators also take into
-account if any of the runs does not yield new data. The next run will always try
-to load all not yet downloaded data from NOAA.
+by themself. Hence airflow's catchup parameter is set to *False*. The operators
+also take into account if any of the runs does not yield new data from the data
+source. The next run will always try to load all not yet downloaded data from
+NOAA.
 
-Every year of NOAA data holds approximately 100MB in gzipped format. Hence, the
-current setup of the project defines the earliest date of NOAA data to be
-downloaded to be 2018-01-01. This can be changed in the 'data_available_from'
+Every year of NOAA data holds approximately 100-200MB in gzipped format,
+depending on the number of KPIs measured and provided by the weather stations.
+Hence, the current setup of the project defines the earliest NOAA data to be
+downloaded to be 2020-01-01. This can be changed in the 'data_available_from'
 variable of the ./variables/noaa.json file.
 
+Please note that when catching up on several decades of history, the data
+processing time can be massive (hours to days depending on the platform Postgres
+is running on).
 
+### Quality Checks
+Data quality checks should be performed on the data in the Postgres staging area. While there are many tools for data manipulation also on the file system level, it seems much more appropriate for large data volumes to do this step based on Postgres or other database platforms.
+The DataQualityOperator implemented here offers only very basic tests via a list
+of SQL statements and expected - or unexpected - values. For a proper production
+system, more sophisticated tests would need to be implemented (e.g. checking the
+number of lines in the files downloaded and comparing that to the number of
+records ingested).
+
+
+### Further Applications
+The 'process_dims_and_facts_dag' provides an example, how to use the final data
+to deliver aggregates for reporting or analysis purposes. In this example, a
+monthly aggregation for weather stations in Germany is computed that contains
+the average min & max temperatures as well as the monthly precipitation. The
+output is stored in 'production.ol_mthly_analytic_ger' and one could think of
+feeding a simple reporting app with the data.
 
 
 ## Design Considerations
