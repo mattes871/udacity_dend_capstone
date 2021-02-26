@@ -1,6 +1,11 @@
+--
+-- noaa_staging schema
+--
+CREATE SCHEMA IF NOT EXISTS noaa_staging ;
+
 -- No PRIMARY KEY definition to be able to deal with duplicate keys
 -- (id+date_+element) once the data is already in Postgres
-CREATE TABLE IF NOT EXISTS public.f_weather_data_raw (
+CREATE TABLE IF NOT EXISTS noaa_staging.f_weather_data_raw (
     id varchar(11) NOT NULL,
     date_ varchar(8) NOT NULL,
     element varchar(4),             -- Name of KPI measured
@@ -10,11 +15,16 @@ CREATE TABLE IF NOT EXISTS public.f_weather_data_raw (
     s_flag varchar(1),              -- Indicates Source of measurement
     observ_time varchar(4)          -- local time of observation
 );
-CREATE INDEX IF NOT EXISTS f_weather_data_raw_ind 
-    ON public.f_weather_data_raw(id, date_, element) ;
+CREATE INDEX IF NOT EXISTS f_weather_data_raw_ind
+    ON noaa_staging.f_weather_data_raw(id, date_, element) ;
 
 
-CREATE TABLE IF NOT EXISTS public.f_climate_data (
+--
+-- production schema
+--
+CREATE SCHEMA IF NOT EXISTS production ;
+
+CREATE TABLE IF NOT EXISTS production.f_climate_data (
     unique_id varchar(16) NOT NULL, -- source-prefix + source-id
     source varchar(4) NOT NULL,
     -- country_id varchar(2) NOT NULL,
@@ -27,11 +37,10 @@ CREATE TABLE IF NOT EXISTS public.f_climate_data (
 ;
 
 
-
 -- Provide a table with mapping data for the kpi names For the time being, only
 -- NOAA data is loaded and the mapping applied is the identity mapping
-DROP TABLE IF EXISTS public.d_kpi_names;
-CREATE TABLE IF NOT EXISTS public.d_kpi_names (
+--DROP TABLE IF EXISTS production.d_kpi_names;
+CREATE TABLE IF NOT EXISTS production.d_kpi_names (
     orig_kpi_name   varchar(16) NOT NULL,
     common_kpi_name varchar(16) NOT NULL,
     source          varchar(8),
@@ -42,7 +51,7 @@ CREATE TABLE IF NOT EXISTS public.d_kpi_names (
 
 -- Use only the 5 most relevant KPIs from NOAA, 65 additional KPIs can be found
 -- in that source.
-INSERT INTO public.d_kpi_names (
+INSERT INTO production.d_kpi_names (
     orig_kpi_name, common_kpi_name, source, description)
     VALUES
            ('PRCP', 'PRCP', 'noaa', 'Precipitation (tenths of mm)'),

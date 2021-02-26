@@ -1,11 +1,10 @@
-DROP TABLE IF EXISTS public.ghcnd_inventory_raw ;
-DROP TABLE IF EXISTS public.ghcnd_stations_raw ;
-DROP TABLE IF EXISTS public.ghcnd_countries_raw ;
-DROP TABLE IF EXISTS public.f_weather_data_raw ;
+DROP TABLE IF EXISTS noaa_staging.ghcnd_inventory_raw CASCADE ;
+DROP TABLE IF EXISTS noaa_staging.ghcnd_stations_raw  CASCADE ;
+DROP TABLE IF EXISTS noaa_staging.ghcnd_countries_raw  CASCADE ;
+DROP TABLE IF EXISTS noaa_staging.f_weather_data_raw  CASCADE ;
 
-DROP TABLE IF EXISTS public.d_inventory ;
-DROP TABLE IF EXISTS public.d_stations ;
-DROP TABLE IF EXISTS public.d_countries ;
-DROP TABLE IF EXISTS public.f_climate_data ;
-
-
+DROP TABLE IF EXISTS production.d_inventory  CASCADE ;
+DROP TABLE IF EXISTS production.d_stations  CASCADE ;
+DROP TABLE IF EXISTS production.d_countries  CASCADE ;
+DROP TABLE IF EXISTS production.f_climate_data  CASCADE ;
+DROP TABLE IF EXISTS production.d_kpi_names CASCADE ;

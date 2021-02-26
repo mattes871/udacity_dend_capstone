@@ -111,17 +111,18 @@ free of charge for educational purposes.
 ## Scope the Project and Gather Data
 
 Setup a workflow that
-- downloads data from NOAA into a Staging area
+- downloads data from NOAA and ECA&D into a Staging area
 - Inserts the data from staging area into a Postgresql DB ensuring
   quality control and duplicate handling
-- transforms the data into meaningful entities
-- stores the entities in a database
-- performas quality checks on the data
+- transforms and combines data from the two sources into meaningful entities
+- stores the entities in a production database
+- generates an exemplary report or data mart from the production data
 
 Further requirements:
-- the workflow should be able to backfill past data and data that was missed due to unavailability of the source data.
-- the solution architecture should allow to easily add new data sources into the
-  workflow
+- the workflow should be able to backfill past data and data that was missed due
+  to unavailability of the source data.
+- the solution architecture should allow easy addition of new data sources into
+  the workflow
 
 
 Workflow should be:
@@ -133,12 +134,14 @@ Workflow should be:
 - Run a sample analytics use case to showcase the usefulness of the data
 - Use Airflow for orchestrating the workflow
 
-### Re-Scoping the Project after two weeks
+### Re-Scoping the Project two weeks into the task
 While implementing the Pipeline for the NOAA data source it became apparent that
 one data source alone is more than enough effort for the time available. Hence,
 I decided to rescope the project and restrict it to deal with a single data
-source only and at the same time the project is still complex enough to
-demonstrate the different tools and concepts we learned in this Nanodegree.
+source only. At the same time, this does not impact the ability to demonstrate
+the different tools and concepts we learned in this Nanodegree.  The
+architecture would allow to add further data sources without a redesign of
+the underlying platforms.
 
 ## Setting up the infrastructure
 
@@ -163,6 +166,7 @@ where the `docker-compose up` is executed.  In my project folder, I created a
 
 > export AWS_KEY='<your-key-here>'
 > export AWS_SECRET='<your-secret-here>'
+> export AWS_SECRET_URI=<url-encoded version of the AWS_SECRET>
 
 If you store this as a '.sh'-file, do not forget to exclude this file from git
 (using .gitignore).
@@ -188,8 +192,39 @@ of SubDAGs.
 ## Explore and Assess the Data
 
 ## Define the Data Model
+The idea behind the data model is to allow an integration of different
+climate-related data sources.  While the time in this project was not sufficient
+to interface to more than the NOAA source, the original NOAA data model is
+modified so that 
+
+a) different data sources can be tracked and
+
+b) (potentially unnecessary) detail is removed
+
 
 ## Run ETL to Model the Data
+The pipeline itself uses four stages:
+
+#### The data source platform 
+In our example, this is the NOAA AWS S3 bucket.
+
+#### A local staging area for downloading the data
+I chose an ordinary file system for the sake of costs and simplicity.
+Alternatively, this could be an HDFS storage.  The stage could even be skipped
+completely and data be imported directly into a database like AWS Redshift.
+
+#### A staging schema in the Postgresql Database
+A staging schema in which to ingest the raw data from the file system. The
+rationale is to do quality checks, cleansing and transformations on the raw data
+while already having the "support" of the database functionality.
+
+#### A production schema in Postgresql 
+A production schema that contains the transformed and quality-checked data that
+is ready for use in production applications.
+
+## The ETL Pipeline
+
+
 
 ### Catchup and Backfill
 The operators for NOAA fact and dimension data handle catchup and backfill
@@ -204,7 +239,6 @@ variable of the ./variables/noaa.json file.
 
 
 
-## Complete Project Write Up
 
 ## Design Considerations
 
@@ -226,7 +260,7 @@ Favorite articles related to Docker, Docker Compose and Airflow:
 * [Apache/Airflow and PostgreSQL with Docker and Docker Compose](https://towardsdatascience.com/apache-airflow-and-postgresql-with-docker-and-docker-compose-5651766dfa96)
 * [6 Things To Know When Dockerizing Python Apps in Production](https://betterprogramming.pub/6-things-to-know-when-dockerizing-python-apps-in-production-f4701b50ca46)
 * [Airflow Sensor to check status of DAG Execution](https://medium.com/@sunilkhaire17/airflow-sensor-to-check-status-of-dag-execution-225342ec2897)
-
+* [Airflow Schedule Interval 101](https://towardsdatascience.com/airflow-schedule-interval-101-bbdda31cc463)
 
 [Stackoverflow](https://stackoverflow.com)
 One of the best sources for finding solutions to problems that other people already had. Be it Python, Postgresql, AWS, you name it. Makes you also feel good that you are not the only one with problems ;-)
@@ -248,4 +282,8 @@ existing GitHub repository unless explicitly mentioned.
 
 ## docker-compose.yaml
 Based on docker-compose.yaml proposed in [Apache/Airflow and PostgreSQL with Docker and Docker Compose](https://towardsdatascience.com/apache-airflow-and-postgresql-with-docker-and-docker-compose-5651766dfa96)
+
+## Using Task Sensors
+Code snippet applied to wait for external tasks.
+[Dependencies between DAGs: How to wait until another DAG finishes in Airflow?](https://www.mikulskibartosz.name/using-sensors-in-airflow/)
 

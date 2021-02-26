@@ -9,7 +9,6 @@ from airflow.models import Variable
 from airflow.utils.state import State
 
 from sensors.dag_status import DagStatusSensor
-# from operators.create_tables import CreateTablesOperator
 
 from helpers.sql_queries import SqlQueries
 
@@ -22,25 +21,37 @@ AIRFLOW_HOME = os.environ.get('AIRFLOW_HOME')
 ## noaa_config needs to be defined when starting Airflow
 ## Definition resides in ./variables/noaa.json
 #
-#  Define all required noaa config parameters here
-#  because access to the airflow Variables via "Variables.get"
-#  accesses the Airflow metadata database.
-noaa_config: dict = Variable.get("noaa_config", deserialize_json=True)
+#  Define all required noaa config parameters as constants
+#  Access to airflow Variables via "Variables.get" takes up a database
+#  connection, thus using the metadata extensively can impact database
+#  connectivity.noaa_config: dict = Variable.get("noaa_config", deserialize_json=True)
+noaa_config = Variable.get("noaa_config", deserialize_json=True)
 NOAA_AWS_CREDS: str = noaa_config['source_params']['aws_credentials']
-NOAA_S3_BUCKET: str = noaa_config['source_params']['s3_bucket']
-NOAA_S3_KEYS: list = noaa_config['source_params']['s3_keys']
-NOAA_S3_FACT_DELIM: str  = noaa_config['source_params']['fact_delimiter']
-NOAA_S3_FACT_PREFIX: str = noaa_config['source_params']['s3_fact_prefix']
-NOAA_FACT_COMPRESSION: str = noaa_config['source_params']['fact_compression']
-NOAA_FACT_FORMAT: str = noaa_config['source_params']['fact_format']
+NOAA_SP_S3_BUCKET: str = noaa_config['source_params']['s3_bucket']
+NOAA_SP_S3_KEYS: list = noaa_config['source_params']['s3_keys']
+NOAA_SP_S3_FACT_PREFIX: str = noaa_config['source_params']['s3_fact_prefix']
+NOAA_SP_S3_FACT_FORMAT: str = noaa_config['source_params']['s3_fact_format']
+NOAA_SP_S3_FACT_COMPRESSION: str = noaa_config['source_params']['s3_fact_compression']
+NOAA_SP_S3_FACT_DELIM: str  = noaa_config['source_params']['s3_fact_delimiter']
 NOAA_DATA_AVAILABLE_FROM: str = noaa_config['data_available_from']
 NOAA_STAGING_LOCATION: str = os.path.join(AIRFLOW_HOME, noaa_config['staging_location'])
 
-NOAA_QUOTATION_CHAR = '"'
+## Definitions in ./variables/general.json
+general_config: dict = Variable.get("general", deserialize_json=True)
+CSV_QUOTE_CHAR = general_config['csv_quote_char']
+CSV_DELIMITER = general_config['csv_delimiter']
+NOAA_STAGING_SCHEMA = general_config['noaa_staging_schema']
+PRODUCTION_SCHEMA = general_config['production_schema']
 
-DEFAULT_START_DATE = datetime.now()
+dags_config: dict = Variable.get("dags", deserialize_json=True)
+DIM_DAG_NAME   = dags_config['dimension_dag_name']
+FACTS_DAG_NAME =  dags_config['facts_dag_name']
+PROCESS_DAG_NAME =  dags_config['process_dag_name']
 
-## 'postgres' is the name of the Airflow Connection to the Postgresql 
+
+## Start date is yesterday, so that the scheduler starts the task when activated
+DEFAULT_START_DATE = datetime.today() - timedelta(days=1)
+
 POSTGRES_STAGING_CONN_ID = os.environ.get('POSTGRES_HOST')
 POSTGRES_CREATE_FACT_TABLES_FILE = 'dags/sql/create_facts_tables.sql'
 
@@ -56,17 +67,13 @@ DEFAULT_ARGS = {
     'region': AWS_REGION
 }
 
-DIM_DAG_NAME   = 'noaa_dimension_dag'
-FACTS_DAG_NAME = 'noaa_facts_dag'
-DAG_NAME = 'process_dims_and_facts_dag'
-
-with DAG(DAG_NAME,
+with DAG(PROCESS_DAG_NAME,
           default_args = DEFAULT_ARGS,
           description = 'Create simple climate datamart from local Postgres data',
           catchup = False,
           start_date = DEFAULT_START_DATE,
           concurrency = 4,
-          max_active_runs = 4, # to prevent Airflow from running 
+          max_active_runs = 4, # to prevent Airflow from running
                                # multiple days/hours at the same time
           schedule_interval = '0 0 * * *' # run daily at midnight
         ) as dag:
@@ -75,25 +82,17 @@ with DAG(DAG_NAME,
     start_operator = DummyOperator(task_id='Begin_execution')
 
     # Wait for dimensions and facts data to be updated
-    #
-    wait_for_dim_data_sensor = DagStatusSensor(
-        task_id = 'wait_for_dim_data',
-        dag_name = DIM_DAG_NAME,
-        status_to_check = State.SUCCESS
-        )
-
-    # Wait for dimensions and facts data to be updated
-    #
-    wait_for_facts_data_sensor = DagStatusSensor(
-        task_id = 'wait_for_facts_data',
-        dag_name = FACTS_DAG_NAME,
-        status_to_check = State.SUCCESS
-        )
+    # wait_for_noaa_load_sensor = DagStatusSensor(
+    #     task_id='Wait_for_noaa_load',
+    #     dag_name = DIM_DAG_NAME,
+    #     status_to_check = State.SUCCESS,
+    #     poke_interval = 120,
+    #     timeout = 3600
+    #     )
 
     # Finally, run reporting and analytics tasks
     # Exemplary, a monthly aggregation of temperature and precipitation is
     # calculated and stored in a separate table
-    #
     aggregate_ger_monthly_operator = PostgresOperator(
         task_id="Aggregate_ger_monthly",
         postgres_conn_id=POSTGRES_STAGING_CONN_ID,
@@ -107,7 +106,5 @@ with DAG(DAG_NAME,
 # Defining the DAG structure
 # ............................................
 
-start_operator >> [wait_for_dim_data_sensor, wait_for_facts_data_sensor]
-[wait_for_dim_data_sensor, wait_for_facts_data_sensor] >> aggregate_ger_monthly_operator
+start_operator >> aggregate_ger_monthly_operator
 aggregate_ger_monthly_operator >> end_operator
-

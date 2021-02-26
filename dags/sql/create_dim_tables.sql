@@ -1,6 +1,12 @@
+--
+-- noaa_staging schema
+--
+CREATE SCHEMA IF NOT EXISTS noaa_staging ;
+
+
 -- No PRIMARY KEY here, to be able to deal with duplicates once the data is
 -- already in Postgres
-CREATE TABLE IF NOT EXISTS public.ghcnd_stations_raw (
+CREATE TABLE IF NOT EXISTS noaa_staging.ghcnd_stations_raw (
     id varchar(11) NOT NULL,
     latitude varchar(9),
     longitude varchar(9),
@@ -11,12 +17,12 @@ CREATE TABLE IF NOT EXISTS public.ghcnd_stations_raw (
     hcn_crn_flag varchar(3),
     wmo_id varchar(5)
 );
-CREATE INDEX IF NOT EXISTS ghcnd_stations_raw_id ON public.ghcnd_stations_raw(id) ;
+CREATE INDEX IF NOT EXISTS ghcnd_stations_raw_id ON noaa_staging.ghcnd_stations_raw(id) ;
 
 
 -- No PRIMARY KEY here, to be able to deal with duplicates once the data is
 -- already in Postgres
-CREATE TABLE IF NOT EXISTS public.ghcnd_inventory_raw (
+CREATE TABLE IF NOT EXISTS noaa_staging.ghcnd_inventory_raw (
     id varchar(11) NOT NULL,
     latitude varchar(9),
     longitude varchar(9),
@@ -24,20 +30,24 @@ CREATE TABLE IF NOT EXISTS public.ghcnd_inventory_raw (
     from_year varchar(4),
     until_year varchar(4)
 );
-CREATE INDEX IF NOT EXISTS ghcnd_inventory_raw_id ON public.ghcnd_inventory_raw(id) ;
+CREATE INDEX IF NOT EXISTS ghcnd_inventory_raw_id ON noaa_staging.ghcnd_inventory_raw(id) ;
 
 
 -- No PRIMARY KEY here, to be able to deal with duplicates once the data is
 -- already in Postgres
-CREATE TABLE IF NOT EXISTS public.ghcnd_countries_raw (
+CREATE TABLE IF NOT EXISTS noaa_staging.ghcnd_countries_raw (
     country_id varchar(2) NOT NULL,
     country varchar(64)
 );
-CREATE INDEX IF NOT EXISTS ghcnd_countries_raw_id ON public.ghcnd_countries_raw(country_id) ;
+CREATE INDEX IF NOT EXISTS ghcnd_countries_raw_id ON noaa_staging.ghcnd_countries_raw(country_id) ;
 
 
+--
+-- production schema
+--
+CREATE SCHEMA IF NOT EXISTS production ;
 
-CREATE TABLE IF NOT EXISTS public.d_stations (
+CREATE TABLE IF NOT EXISTS production.d_stations (
     unique_id varchar(16) NOT NULL,
     source varchar(4) NOT NULL,
     latitude varchar(9),
@@ -51,7 +61,7 @@ CREATE TABLE IF NOT EXISTS public.d_stations (
     PRIMARY KEY (unique_id)
 );
 
-CREATE TABLE IF NOT EXISTS public.d_inventory (
+CREATE TABLE IF NOT EXISTS production.d_inventory (
     unique_id varchar(16) NOT NULL,
     source varchar(4) NOT NULL,
     common_kpi_name varchar(4) NOT NULL,
@@ -60,11 +70,9 @@ CREATE TABLE IF NOT EXISTS public.d_inventory (
     PRIMARY KEY (unique_id, common_kpi_name)
 );
 
-CREATE TABLE IF NOT EXISTS public.d_countries (
+CREATE TABLE IF NOT EXISTS production.d_countries (
     country_id varchar(2) NOT NULL,
     country varchar(64),
     source varchar(4) NOT NULL,
     PRIMARY KEY (country_id, source)
 );
-
-

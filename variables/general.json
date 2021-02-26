@@ -1,0 +1,14 @@
+{
+    "dags": {
+        "dimension_dag_name": "noaa_dimension_dag",
+        "facts_dag_name": "noaa_facts_dag",
+        "process_dag_name": "process_dims_and_facts_dag",
+        "noaa_dag_name": "noaa_dag"
+    },
+    "general": {
+        "csv_quote_char": "\"",
+        "csv_delimiter": "|",
+        "noaa_staging_schema": "noaa_staging",
+        "production_schema": "production"
+    }
+}
