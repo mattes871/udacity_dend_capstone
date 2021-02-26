@@ -4,11 +4,10 @@ import os
 from airflow import DAG
 from airflow.operators.dummy import DummyOperator
 from airflow.models import Variable
+from airflow.providers.postgres.operators.postgres import PostgresOperator
 # from airflow.operators.python import PythonOperator
-# from airflow.providers.postgres.operators.postgres import PostgresOperator
 # from airflow.providers.postgres.hooks.postgres import PostgresHook
 # from airflow.providers.amazon.aws.hooks.s3 import S3Hook
-# from hooks.s3_hook_local import S3HookLocal
 
 # from airflow.operators.subdag import SubDagOperator
 # from subdags.download_dim_subdag import download_noaa_dim_subdag
@@ -22,8 +21,7 @@ from operators.download_noaa_dim_file_to_staging import DownloadNOAADimFileToSta
 from operators.select_from_noaa_s3_to_staging import SelectFromNOAAS3ToStagingOperator
 from operators.local_stage_to_postgres import LocalStageToPostgresOperator
 
-
-# from helpers.sql_queries import SqlQueries
+from helpers.sql_queries import SqlQueries
 # from helpers.source_data_class import SourceDataClass
 
 
@@ -52,7 +50,7 @@ NOAA_STAGING_DIM_RAW = os.path.join(NOAA_STAGING_LOCATION,'dimensions_raw')
 NOAA_STAGING_DIM_CSV = os.path.join(NOAA_STAGING_LOCATION,'dimensions_csv')
 NOAA_QUOTATION_CHAR = '"'
 
-default_start_date = datetime(year=2021,month=1,day=31)
+DEFAULT_START_DATE = datetime.now()
 
 ## 'postgres' is the name of the Airflow Connection to the Postgresql 
 POSTGRES_STAGING_CONN_ID = os.environ.get('POSTGRES_HOST')
@@ -73,24 +71,24 @@ POSTGRES_STAGING_CONN_ID: {POSTGRES_STAGING_CONN_ID}
 POSTGRES_CREATE_DIM_TABLES_FILE: {POSTGRES_CREATE_DIM_TABLES_FILE} 
 """)
 
-default_args = {
+DEFAULT_ARGS = {
     'owner': 'matkir',
     'depends_on_past': False,
     'retries': 3,
     'catchup': False,
     'retry_delay': timedelta(minutes=5),
     'email_on_retry': False,
-    'start_date': default_start_date,
+    'start_date': DEFAULT_START_DATE,
     'region': AWS_REGION
 }
 
 DAG_NAME = 'noaa_dimension_dag'
 
 with DAG(DAG_NAME,
-          default_args = default_args,
-          description = 'Load climate data and create a regular report',
+          default_args = DEFAULT_ARGS,
+          description = 'Load dimensions info from NOAA S3 to local Postgres',
           catchup = False,
-          start_date = datetime(year=2021,month=1,day=31),
+          start_date = DEFAULT_START_DATE,
           concurrency = 4,
           max_active_runs = 4, # to prevent Airflow from running 
                                # multiple days/hours at the same time
@@ -107,6 +105,14 @@ with DAG(DAG_NAME,
         sql_query_file = os.path.join(AIRFLOW_HOME,
                                       POSTGRES_CREATE_DIM_TABLES_FILE),
         )
+
+    # Populate d_kpi_names table with most relevant KPI names
+    #
+    populate_kpi_names_table_operator = PostgresOperator(
+        task_id="populate_kpi_names_table",
+        postgres_conn_id=POSTGRES_STAGING_CONN_ID,
+        sql=SqlQueries.populate_d_kpi_table
+    )
 
     # Load relevant dimension and documentation files from the
     # NOAA S3 bucket into the local Staging Area (Filesystem)
@@ -191,7 +197,7 @@ with DAG(DAG_NAME,
             filename = NOAA_S3_KEYS[s3_index],
             local_path_fixed_width = NOAA_STAGING_DIM_RAW,
             local_path_csv = NOAA_STAGING_DIM_CSV,
-            column_names = ['id', 'latitude','longitude','kpi','from_year','until_year'],
+            column_names = ['id', 'latitude','longitude','element','from_year','until_year'],
             column_positions = [0, 11, 20, 30, 35, 40],
             delimiter = f'{NOAA_S3_DIM_DELIM}',
             quote = f'{NOAA_QUOTATION_CHAR}',
@@ -278,6 +284,30 @@ with DAG(DAG_NAME,
         task_id = 'Check_dim_quality'
     )
 
+    # Transfer raw tables to production tables
+    #
+    load_noaa_countries_operator = PostgresOperator(
+        task_id="load_noaa_countries",
+        postgres_conn_id=POSTGRES_STAGING_CONN_ID,
+        sql=SqlQueries.load_noaa_countries
+    )
+
+    # Transfer raw tables to production tables
+    #
+    load_noaa_stations_operator = PostgresOperator(
+        task_id="load_noaa_stations",
+        postgres_conn_id=POSTGRES_STAGING_CONN_ID,
+        sql=SqlQueries.load_noaa_stations
+    )   
+
+    # Transfer raw tables to production tables
+    #
+    load_noaa_inventory_operator = PostgresOperator(
+        task_id="load_noaa_inventory",
+        postgres_conn_id=POSTGRES_STAGING_CONN_ID,
+        sql=SqlQueries.load_noaa_inventory
+    )
+
     end_operator = DummyOperator(task_id='Stop_execution', dag=dag)
 
 
@@ -289,11 +319,17 @@ with DAG(DAG_NAME,
 # ............................................
 
 start_operator >> create_noaa_dim_tables_operator
-create_noaa_dim_tables_operator >> [download_noaa_dims] 
+create_noaa_dim_tables_operator >> populate_kpi_names_table_operator
+populate_kpi_names_table_operator >> [download_noaa_dims] 
 [download_noaa_dims] >> dummy1_operator >> [reformat_noaa_dims] 
 [reformat_noaa_dims] >> dummy2_operator >> [import_noaa_dims]
 [import_noaa_dims] >> add_index_to_dim_tables_operator
 add_index_to_dim_tables_operator >> check_dim_quality_operator
-check_dim_quality_operator >> end_operator
+check_dim_quality_operator >> [load_noaa_countries_operator,
+                               load_noaa_stations_operator, 
+                               load_noaa_inventory_operator]
+[load_noaa_countries_operator,
+ load_noaa_stations_operator, 
+ load_noaa_inventory_operator] >> end_operator
 
 

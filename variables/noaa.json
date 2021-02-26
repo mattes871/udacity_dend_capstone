@@ -22,7 +22,7 @@
             "fact_compression": "gzip",
             "fact_delimiter": ","
         },
-        "data_available_from": "20190101",
+        "data_available_from": "2019-01-01",
         "staging_location": "./staging_files/noaa",
         "version": "v2021-02-20"
     }

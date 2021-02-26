@@ -43,3 +43,67 @@ response = s3_client.head_object(Bucket='noaa-ghcn-pds', Key='status.txt')
 'ContentDisposition': 'status.txt', 
 'ContentType': 'application/octet-stream', 
 'Metadata': {}}
+
+
+
+import os
+from datetime import date, datetime
+#from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+from hooks.s3_hook_local import S3HookLocal
+from airflow.models import BaseOperator
+from airflow.utils.decorators import apply_defaults
+from operators.download_s3_file_to_staging import DownloadS3FileToStagingOperator
+from helpers.sql_queries import SqlQueries
+
+s3_hook = S3HookLocal(aws_conn_id='aws_credentials',local_dummy=False)
+
+where_clause = "where s._2 >= '2021-02-20'"
+f_sql = f"""select s._1 as id,
+                   s._2 as date_,
+                   s._3 as element,
+                   s._4 as data_value,
+                   s._5 as m_flag,
+                   s._6 as q_flag,
+                   s._7 as s_flag,
+                   s._8 as observ_time
+            from s3object s
+            {where_clause}
+            """
+
+f_sql = "select * from s3object"
+
+result = s3_hook.select_key(
+    key = "csv.gz/2021.csv.gz",
+    bucket_name = "noaa-ghcn-pds",
+    expression  = f_sql,
+    expression_type = "SQL",
+    input_serialization = {
+        'CSV': {
+                   'FileHeaderInfo': 'NONE',
+                   'FieldDelimiter': ','
+                },
+                'CompressionType': 'GZIP'
+            },
+    output_serialization = {
+        'CSV': {
+                'FieldDelimiter': f',',
+                }
+            }
+    )
+
+
+
+result = s3_hook.select_key(
+    key = "csv/2020.csv",
+    bucket_name = "noaa-ghcn-pds",
+    expression  = "select s.* from s3object s",
+    expression_type = "SQL",
+    input_serialization = {
+        'CSV': {}
+        }
+    )
+
+result = s3_hook.read_key(
+    key = "csv/2021.csv",
+    bucket_name = "noaa-ghcn-pds",
+    )

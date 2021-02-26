@@ -1,16 +1,17 @@
 import os
 from datetime import date, datetime
-#from airflow.providers.amazon.aws.hooks.s3 import S3Hook
-from hooks.s3_hook_local import S3HookLocal
+from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+#from hooks.s3_hook_local import S3HookLocal
 from airflow.models import BaseOperator
 from airflow.utils.decorators import apply_defaults
 from operators.download_s3_file_to_staging import DownloadS3FileToStagingOperator
+from helpers.sql_queries import SqlQueries
+
 
 class SelectFromNOAAS3ToStagingOperator(BaseOperator):
-    """ Select records for a specific day from the
-        NOAA table file on Amazon S3.
-        and write them onto the staging location as 
-        csv file.
+    """ 
+    Select records for a specific day from the NOAA table file on Amazon S3.
+    and write them onto the staging location as csv file.
     """
 
     ui_color = '#00FF00'
@@ -29,6 +30,8 @@ class SelectFromNOAAS3ToStagingOperator(BaseOperator):
                  execution_date: str = '',
                  real_date:  str = '',
                  local_path: str = '',
+                 fact_delimiter: str = ',',
+                 quotation_char: str = '"',
                  *args, **kwargs):
 
         super(SelectFromNOAAS3ToStagingOperator, self).__init__(*args, **kwargs)
@@ -40,6 +43,8 @@ class SelectFromNOAAS3ToStagingOperator(BaseOperator):
         self.execution_date=execution_date
         self.real_date=real_date
         self.local_path=local_path  # +"{{ execution_date.year }}"
+        self.fact_delimiter=fact_delimiter
+        self.quotation_char=quotation_char
         print(f"""SelectFromNOAAS3ToStagingOperator:
         {self.aws_credentials}
         {self.s3_bucket}
@@ -49,8 +54,9 @@ class SelectFromNOAAS3ToStagingOperator(BaseOperator):
         {self.execution_date}
         {self.real_date}
         {self.local_path}
+        {self.fact_delimiter}
+        {self.quotation_char}
         """)
-
 
 
     def execute(self, context: dict) -> None:
@@ -62,11 +68,10 @@ class SelectFromNOAAS3ToStagingOperator(BaseOperator):
         different file name
         """
 
-
         def load_full_year(year: int, context: dict) -> None:
             """ 
             Uses DownloadS3FileToStagingOperator to download full *year* csv.gz
-            file from the NOAA archive onto the Staging Area
+            file from the NOAA archive onto the Staging Area.
             """
             DownloadS3FileToStagingOperator(
                 task_id='Copy_noaa_s3_fact_file_to_staging',
@@ -84,12 +89,12 @@ class SelectFromNOAAS3ToStagingOperator(BaseOperator):
                       f'\nExecution date: {self.execution_date},'+
                       f'\nBucket & Table File: {self.s3_bucket} + {self.s3_table_file}'+
                       f'\nStaging Location: {self.local_path}')
-        s3_hook = S3HookLocal(aws_conn_id=self.aws_credentials)
+        s3_hook = S3Hook(aws_conn_id=self.aws_credentials)
         # Make sure path for local staging exists
         most_recent_data_year = datetime.strptime(self.most_recent_data_date,
-                                                  '%Y%m%d').year
+                                                  '%Y-%m-%d').year
         execution_date_year = datetime.strptime(self.execution_date,
-                                                '%Y%m%d').year
+                                                '%Y-%m-%d').year
         if not os.path.exists(self.local_path):
             self.log.info(f"Create Staging Location Folder '{self.local_path}'")
             os.makedirs(self.local_path)
@@ -103,20 +108,20 @@ class SelectFromNOAAS3ToStagingOperator(BaseOperator):
             most_recent_data_year += 1
 
         # If most_recent_data_year == execution year and the
-        # date is Jan 1st, lets download the whole file instead
+        # date is Jan 1st, download the whole file instead
         # of multiple selects
         if ((most_recent_data_year == execution_date_year) &
-            (self.most_recent_data_date[4:8] == '0101')):
+            (self.most_recent_data_date[4:10] == '-01-01')):
             self.log.info('Download full year: {most_recent_data_year}')
             load_full_year(most_recent_data_year, context)
         else:
-        # Restrict to records that are newer than the 'most_recent'
-        # record in the staging table
-        #
-        # >>>> WIP: What if 'most_recent' is in past year
-        # >>>>      records need to be loaded from different file
-        #
-            where_clause = f"where s._2 >= '{self.most_recent_data_date.strftime('%Y%m%d')}'"
+            # Restrict to records that are newer than the 'most_recent'
+            # record in the staging table
+            #
+            # >>>> WIP: What if 'most_recent' is in past year
+            # >>>>      records need to be loaded from different file
+            #
+            where_clause = f"where s._2 >= '{self.most_recent_data_date}'"
             f_sql = f"""select s._1 as id,
                                s._2 as date_,
                                s._3 as element,
@@ -133,21 +138,30 @@ class SelectFromNOAAS3ToStagingOperator(BaseOperator):
                 key = f'{self.s3_prefix}/{self.s3_table_file}',
                 bucket_name = f'{self.s3_bucket}',
                 expression  = f_sql,
+                expression_type = 'SQL',
                 input_serialization = {
                     'CSV': {
                            'FileHeaderInfo': 'NONE',
                            'FieldDelimiter': ','
-                        },
+                           },
                     'CompressionType': 'GZIP'
+                },
+                output_serialization = {
+                    'CSV': {
+                            'FieldDelimiter': f',',
+                           }
                     }
                 )
+            # Debug Output
+            self.log.info(f'Result length: {len(result)}')
+            self.log.info(f'Result[:512]: {result[:512]}')
             # Store results as csv file
             csv_file_name = os.path.join(self.local_path,
                                          f'{self.execution_date}')+'.csv'
             self.log.info(f'Type of result: {type(result)}')
             self.log.info(f'Write to file: {csv_file_name}')
             with open(csv_file_name,'w') as f:
-                f.write(f'id,date_,data_value,m_flag,q_flag,s_flag,observ_time\n')
+                #f.write(f'id,date_,element,data_value,m_flag,q_flag,s_flag,observ_time\n')
                 f.write(f'{result}')
 
         #  # Check if file already exists and rename with timestamp-suffix

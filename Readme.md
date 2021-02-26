@@ -49,6 +49,7 @@ variables:
 
 > export AWS_KEY='<your-key-here>'
 > export AWS_SECRET='<your-secret-here>'
+> export AWS_SECRET_URI=<url-encoded version of the AWS_SECRET>
 
 Once the AWS credentials are provided, go to the main project directory and execute
 
@@ -205,4 +206,46 @@ variable of the ./variables/noaa.json file.
 
 ## Complete Project Write Up
 
+## Design Considerations
+
+a) Minimize network traffic to avoid costs and speed up the process
+b) Bulk downloads over incremental downloads (related to a)
+
+# References
+Besides the usual documentation on [Python.org](http://python.org), [AWS](https://docs.aws.amazon.com/), [Docker](https://www.docker.com) and [Postgresql](https://www.postgresql.org/), I intensively used the following sources for problem solving and inspiration:
+
+
+[Medium.com](https://medium.com)
+Lots of inspiration and help from [Medium.com](https://medium.com).  A great
+source to get code snippets and to gain understanding how things work. However,
+experience also shows that these snippets need heavy customization to fit into
+ones own project context. 
+
+Favorite articles related to Docker, Docker Compose and Airflow:
+
+* [Apache/Airflow and PostgreSQL with Docker and Docker Compose](https://towardsdatascience.com/apache-airflow-and-postgresql-with-docker-and-docker-compose-5651766dfa96)
+* [6 Things To Know When Dockerizing Python Apps in Production](https://betterprogramming.pub/6-things-to-know-when-dockerizing-python-apps-in-production-f4701b50ca46)
+* [Airflow Sensor to check status of DAG Execution](https://medium.com/@sunilkhaire17/airflow-sensor-to-check-status-of-dag-execution-225342ec2897)
+
+
+[Stackoverflow](https://stackoverflow.com)
+One of the best sources for finding solutions to problems that other people already had. Be it Python, Postgresql, AWS, you name it. Makes you also feel good that you are not the only one with problems ;-)
+
+
+* [GitHub.com](https://github.com)
+GitHub is full of interesting repositories. If searching for 'Udacity Data
+Engineering Nanodegree Capstone', already many inspirational links will pop up.
+However, there is no quality check and most of the repos out there do not work
+out-of-the-box (especially not the ones for Udacity degrees). Hence, this is no
+source for simple copy & paste but to see how other participants (tried to)
+solve the task.
+
+*Disclaimer:* For this project, none of the code was taken directly from an
+existing GitHub repository unless explicitly mentioned.
+
+
+# Sources
+
+## docker-compose.yaml
+Based on docker-compose.yaml proposed in [Apache/Airflow and PostgreSQL with Docker and Docker Compose](https://towardsdatascience.com/apache-airflow-and-postgresql-with-docker-and-docker-compose-5651766dfa96)
 

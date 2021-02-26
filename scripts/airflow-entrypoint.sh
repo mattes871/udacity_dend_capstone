@@ -26,9 +26,6 @@ echo "Checking for connections to add to Airflow"
 # can be passed via Environment variables instead of a json file
 ${AIRFLOW_HOME}/scripts/create_airflow_connections.sh
 
-#echo "Sourcing set_environment.sh"
-#source ./scripts/set_environment.sh
-
 airflow webserver -D
 
 

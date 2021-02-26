@@ -1,7 +1,8 @@
 import os
 from datetime import date, datetime
 #from airflow.providers.amazon.aws.hooks.s3 import S3Hook
-from hooks.s3_hook_local import S3HookLocal
+from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+# from hooks.s3_hook_local import S3HookLocal
 from airflow.models import BaseOperator
 from airflow.utils.decorators import apply_defaults
 
@@ -70,7 +71,7 @@ class CopyNOAAS3FilesToStagingOperator(BaseOperator):
 
 
         self.log.info(f'Executing CopyNOAAS3FilesToStagingOperator ...')
-        s3_hook = S3HookLocal(self.aws_credentials)
+        s3_hook = S3Hook(self.aws_credentials)
         self.log.info(f'Staging Location: {self.local_path}')
         # Make sure path for local staging exists
         if not os.path.exists(self.local_path):

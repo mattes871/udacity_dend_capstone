@@ -113,7 +113,9 @@ class DownloadS3FileToStagingOperator(BaseOperator):
         # wether it should be overwritten or 
         # moved to another file with timestamp-suffix added
         if os.path.isfile(full_local_filename):
-            if self.replace_existing: 
+            if self.replace_existing:
+                # Would be better to first rename and only remove once the new
+                # file could be downloaded properly
                 os.remove(full_local_filename)
                 self.log.info(f"Remove existing file '{full_local_filename}")
             else:

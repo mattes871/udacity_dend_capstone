@@ -1,4 +1,8 @@
-version: "3.8" #"2.2"
+#
+# [Source:] Based on docker-compose.yaml proposed in [Apache/Airflow and PostgreSQL with Docker and Docker Compose](https://towardsdatascience.com/apache-airflow-and-postgresql-with-docker-and-docker-compose-5651766dfa96)
+#
+
+version: "3.8"
 
 volumes:
   postgresql_12_data:
