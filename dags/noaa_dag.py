@@ -70,8 +70,8 @@ DEFAULT_START_DATE = datetime.today() - timedelta(days=1)
 
 ## 'postgres' is the name of the Airflow Connection to the Postgresql
 POSTGRES_STAGING_CONN_ID = os.environ.get('POSTGRES_HOST')
-POSTGRES_CREATE_DIM_TABLES_FILE = 'dags/sql/create_dim_tables.sql'
-POSTGRES_CREATE_FACT_TABLES_FILE = 'dags/sql/create_facts_tables.sql'
+POSTGRES_CREATE_NOAA_TABLES_FILE = 'dags/sql/create_noaa_tables.sql'
+POSTGRES_CREATE_OPAQ_TABLES_FILE = 'dags/sql/create_opaq_tables.sql'
 
 DEFAULT_ARGS = {
     'owner': 'matkir',
@@ -146,11 +146,11 @@ with DAG(NOAA_DAG_NAME,
     # -----------------------------------------------------
     with TaskGroup("Create_postgres_tables") as create_tables:
         # Create NOAA dimension tables in Staging Database (Postgresql)
-        create_noaa_dim_tables_operator = CreateTablesOperator(
-            task_id = 'Create_noaa_dim_tables',
+        create_noaa_tables_operator = CreateTablesOperator(
+            task_id = 'Create_noaa_tables',
             postgres_conn_id = POSTGRES_STAGING_CONN_ID,
             sql_query_file = os.path.join(AIRFLOW_HOME,
-                                          POSTGRES_CREATE_DIM_TABLES_FILE),
+                                          POSTGRES_CREATE_NOAA_TABLES_FILE),
             )
         # Populate d_kpi_names table with most relevant KPI names
         populate_kpi_names_table_operator = PostgresOperator(
@@ -158,20 +158,13 @@ with DAG(NOAA_DAG_NAME,
             postgres_conn_id=POSTGRES_STAGING_CONN_ID,
             sql=SqlQueries.populate_d_kpi_table
         )
-        # Create NOAA fact tables in Staging Database (Postgresql)
-        create_noaa_fact_tables_operator = CreateTablesOperator(
-            task_id = 'Create_noaa_fact_tables',
-            postgres_conn_id = POSTGRES_STAGING_CONN_ID,
-            sql_query_file = os.path.join(AIRFLOW_HOME,
-                                          POSTGRES_CREATE_FACT_TABLES_FILE),
-            )
         # Create partition tables for f_climate_data
         create_partition_tables_operator = PythonOperator(
             task_id = 'Create_partition_tables',
             python_callable = create_partition_tables
             )
-        create_noaa_dim_tables_operator >> populate_kpi_names_table_operator
-        create_noaa_fact_tables_operator >> create_partition_tables_operator
+        create_noaa_tables_operator >> populate_kpi_names_table_operator
+        create_noaa_tables_operator >> create_partition_tables_operator
 
     # -----------------------------------------------------
     # Run import of Dimension and Fact data in parallel
