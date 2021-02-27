@@ -57,8 +57,6 @@ PRODUCTION_SCHEMA = general_config['production_schema']
 
 dags_config: dict = Variable.get("dags", deserialize_json=True)
 NOAA_DAG_NAME   = dags_config['noaa_dag_name']
-#DIM_DAG_NAME   = dags_config['dimension_dag_name']
-#FACTS_DAG_NAME =  dags_config['facts_dag_name']
 PROCESS_DAG_NAME =  dags_config['process_dag_name']
 
 NOAA_STAGING_DIM_RAW = os.path.join(NOAA_STAGING_LOCATION,'dimensions_raw')
@@ -71,7 +69,7 @@ DEFAULT_START_DATE = datetime.today() - timedelta(days=1)
 ## 'postgres' is the name of the Airflow Connection to the Postgresql
 POSTGRES_STAGING_CONN_ID = os.environ.get('POSTGRES_HOST')
 POSTGRES_CREATE_NOAA_TABLES_FILE = 'dags/sql/create_noaa_tables.sql'
-POSTGRES_CREATE_OPAQ_TABLES_FILE = 'dags/sql/create_opaq_tables.sql'
+POSTGRES_CREATE_OPENAQ_TABLES_FILE = 'dags/sql/create_openaq_tables.sql'
 
 DEFAULT_ARGS = {
     'owner': 'matkir',
@@ -134,8 +132,8 @@ with DAG(NOAA_DAG_NAME,
           description = 'Load NOAA data from NOAA S3 to local Postgres',
           catchup = False,
           start_date = DEFAULT_START_DATE,
-          concurrency = 4,
-          max_active_runs = 4,
+          concurrency = 8,
+          max_active_runs = 8,
           schedule_interval = '0 0 * * *' # run daily at midnight
         ) as dag:
 

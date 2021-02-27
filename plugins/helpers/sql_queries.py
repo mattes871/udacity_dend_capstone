@@ -4,6 +4,7 @@ class SqlQueries:
     """
     Collection of all SQL queries to be used in the pipeline.
     """
+    
     general_config: dict = Variable.get("general", deserialize_json=True)
     CSV_QUOTE_CHAR = general_config['csv_quote_char']
     CSV_DELIMITER = general_config['csv_delimiter']
@@ -36,7 +37,9 @@ class SqlQueries:
         SELECT
             'noaa' || id as unique_id,
             'noaa' as source,
-            latitude, longitude, elevation,
+            latitude::numeric,
+            longitude::numeric,
+            elevation::int,
             state, name
         FROM {NOAA_STAGING_SCHEMA}.ghcnd_stations_raw
         WHERE id is not null

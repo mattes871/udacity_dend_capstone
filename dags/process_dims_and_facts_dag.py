@@ -44,8 +44,8 @@ NOAA_STAGING_SCHEMA = general_config['noaa_staging_schema']
 PRODUCTION_SCHEMA = general_config['production_schema']
 
 dags_config: dict = Variable.get("dags", deserialize_json=True)
-DIM_DAG_NAME   = dags_config['dimension_dag_name']
-FACTS_DAG_NAME =  dags_config['facts_dag_name']
+NOAA_DAG_NAME   = dags_config['noaa_dag_name']
+OPENAQ_DAG_NAME =  dags_config['openaq_dag_name']
 PROCESS_DAG_NAME =  dags_config['process_dag_name']
 
 

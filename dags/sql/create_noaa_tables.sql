@@ -65,9 +65,9 @@ CREATE SCHEMA IF NOT EXISTS production ;
 CREATE TABLE IF NOT EXISTS production.d_stations (
     unique_id varchar(16) NOT NULL,
     source varchar(4) NOT NULL,
-    latitude varchar(9),
-    longitude varchar(9),
-    elevation varchar(6),
+    latitude numeric (10,7),
+    longitude numeric (10,7),
+    elevation int,
     state varchar(2),
     name varchar(30),
     --gsn_flag varchar(3),
@@ -111,9 +111,9 @@ CREATE TABLE IF NOT EXISTS production.f_climate_data (
 CREATE TABLE IF NOT EXISTS production.d_kpi_names (
     orig_kpi_name   varchar(16) NOT NULL,
     common_kpi_name varchar(16) NOT NULL,
-    source          varchar(8),
+    source          varchar(4) NOT NULL,
     description     text,
-    PRIMARY KEY (orig_kpi_name)         -- Constraint necessary for 'ON CONFLICT'
+    PRIMARY KEY (orig_kpi_name, source)  -- Constraint necessary for 'ON CONFLICT'
 );
 
 

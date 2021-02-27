@@ -1,0 +1,19 @@
+{
+    "openaq_config": {
+        "source_name": "openaq",
+        "description": "Air pollution KPIs from stations worldwide, dating back until 2013",
+        "source_type": "amazon s3",
+        "source_params": {
+            "aws_credentials": "aws_credentials",
+            "s3_bucket": "openaq-fetches",
+            "s3_keys":[],
+            "s3_fact_prefix": "realtime-gzipped",
+            "s3_fact_format": "ndjson",
+            "s3_fact_compression": "gzip",
+            "s3_fact_delimiter": ""
+        },
+        "data_available_from": "2020-01-01",
+        "staging_location": "./staging_files/openaq",
+        "version": "v2021-02-26"
+    }
+}
