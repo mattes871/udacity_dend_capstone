@@ -7,35 +7,64 @@ CREATE SCHEMA IF NOT EXISTS openaq_staging ;
 -- No PRIMARY KEY here, to be able to deal with duplicates once the data is
 -- already in Postgres
 CREATE TABLE IF NOT EXISTS openaq_staging.stations_raw (
-    sensor_node_id varchar(32) NOT NULL,
-    site_name      varchar(32),
-    node_source_name varchar(16),
-    node_ismobile  varchar(5),
-    node_latitude  varchar(11),
-    node_longitude varchar(11),
-    sensor_id varchar(32),
-    measurand_parameter varchar(16),
-    measurand_unit varchar(16)
+    sensor_node_id varchar NOT NULL,
+    site_name      varchar,
+    node_source_name varchar,
+    node_ismobile  varchar,
+    node_latitude  varchar,
+    node_longitude varchar,
+    sensor_id varchar,
+    measurand_parameter varchar,
+    measurand_unit varchar
 );
+-- CREATE TABLE IF NOT EXISTS openaq_staging.stations_raw (
+--     sensor_node_id varchar(32) NOT NULL,
+--     site_name      varchar(32),
+--     node_source_name varchar(16),
+--     node_ismobile  varchar(5),
+--     node_latitude  varchar(11),
+--     node_longitude varchar(11),
+--     sensor_id varchar(32),
+--     measurand_parameter varchar(16),
+--     measurand_unit varchar(16)
+-- );
 CREATE INDEX IF NOT EXISTS stations_raw_id ON openaq_staging.stations_raw(sensor_node_id) ;
 
 
 -- No PRIMARY KEY definition to be able to deal with duplicate keys
--- (id+date_+element) once the data is already in Postgres
+-- DROP TABLE IF EXISTS  openaq_staging.f_air_data_raw CASCADE ;
 CREATE TABLE IF NOT EXISTS openaq_staging.f_air_data_raw (
-    date_utc varchar(25),
-    date_local varchar(25),
-    parameter varchar(16), --measurand_parameter
-    location varchar(32), -- site_name???
-    value varchar(8),
-    unit varchar(16), -- measurand_unit
-    latitude varchar(11),
-    longitude varchar(11),
-    country varchar(3),
-    source_name varchar(16), --node_source_name
-    source_type varchar(16),
-    mobile varchar(5) -- node_ismobile
+    date_utc varchar,
+    date_local varchar,
+    parameter varchar, --measurand_parameter
+    location varchar, -- site_name???
+    value varchar,
+    unit varchar, -- measurand_unit
+    latitude varchar,
+    longitude varchar,
+    country varchar,
+    source_name varchar, --node_source_name
+    source_type varchar,
+    mobile varchar, -- node_ismobile
+    averaging_unit varchar,
+    averaging_value varchar
 ) ;
+-- CREATE TABLE IF NOT EXISTS openaq_staging.f_air_data_raw (
+--     date_utc varchar(25),
+--     date_local varchar(25),
+--     parameter varchar(16), --measurand_parameter
+--     location varchar(32), -- site_name???
+--     value varchar(8),
+--     unit varchar(16), -- measurand_unit
+--     latitude varchar(11),
+--     longitude varchar(11),
+--     country varchar(3),
+--     source_name varchar(16), --node_source_name
+--     source_type varchar(16),
+--     mobile varchar(5), -- node_ismobile
+--     averaging_unit varchar(9),
+--     averaging_value varchar(5)
+-- ) ;
 
 -- CREATE INDEX IF NOT EXISTS f_air_data_raw
 --     ON openaq_staging.f_air_data_raw(id, date_, element) ;
@@ -47,7 +76,7 @@ CREATE TABLE IF NOT EXISTS openaq_staging.f_air_data_raw (
 CREATE SCHEMA IF NOT EXISTS production ;
 
 CREATE TABLE IF NOT EXISTS production.d_stations (
-    unique_id varchar(16) NOT NULL,
+    station_id varchar(16) NOT NULL,
     source varchar(4) NOT NULL,
     latitude numeric (10,7),
     longitude numeric (10,7),
@@ -57,7 +86,7 @@ CREATE TABLE IF NOT EXISTS production.d_stations (
     --gsn_flag varchar(3),
     --hcn_crn_flag varchar(3),
     --wmo_id varchar(5),
-    PRIMARY KEY (unique_id)
+    PRIMARY KEY (station_id)
 );
 
 CREATE TABLE IF NOT EXISTS production.d_countries (
@@ -68,15 +97,15 @@ CREATE TABLE IF NOT EXISTS production.d_countries (
 );
 
 
-CREATE TABLE IF NOT EXISTS production.f_climate_data (
-    unique_id varchar(16) NOT NULL, -- source-prefix + source-id
+CREATE TABLE IF NOT EXISTS production.f_airpoll_data (
+    station_id varchar(16) NOT NULL, -- source-prefix + source-id
     source varchar(4) NOT NULL,
     -- country_id varchar(2) NOT NULL,
     date_ date NOT NULL,
     common_kpi_name varchar(4),     -- harmonized kpi_name, using a lookup table
     data_value integer,             -- in openaq only integer values
     observ_time varchar(4),
-    PRIMARY KEY (unique_id, date_, common_kpi_name)
+    PRIMARY KEY (station_id, date_, common_kpi_name)
 )   PARTITION BY RANGE (date_)
 ;
 

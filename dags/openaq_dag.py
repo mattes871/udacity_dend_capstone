@@ -18,7 +18,8 @@ from operators.data_quality import DataQualityOperator
 from operators.reformat_fixed_width_file import ReformatFixedWidthFileOperator
 from operators.download_openaq_files import DownloadOpenAQFilesOperator
 #from operators.select_from_openaq_s3_to_staging import SelectFromOpenAQS3ToStagingOperator
-from operators.local_stage_to_postgres import LocalStageToPostgresOperator
+from operators.local_csv_to_postgres import LocalCSVToPostgresOperator
+from operators.reformat_openaq_json_files import ReformatOpenAQJSONFilesOperator
 
 from helpers.sql_queries import SqlQueries
 from helpers.data_quality_checks import DataQualityChecks
@@ -64,10 +65,10 @@ OPENAQ_STAGING_DIM_CSV = os.path.join(OPENAQ_STAGING_LOCATION,'dimensions_csv')
 OPENAQ_STAGING_FACTS = os.path.join(OPENAQ_STAGING_LOCATION,'facts')
 
 ## Start date is yesterday, so that the scheduler starts the task when activated
-DEFAULT_START_DATE = datetime.today() - timedelta(days=6)
+DEFAULT_START_DATE = datetime.today() - timedelta(days=1)
 
 ## 'postgres' is the name of the Airflow Connection to the Postgresql
-POSTGRES_STAGING_CONN_ID = os.environ.get('POSTGRES_HOST')
+POSTGRES_STAGING_CONN_ID = 'postgres'
 POSTGRES_CREATE_NOAA_TABLES_FILE = 'dags/sql/create_noaa_tables.sql'
 POSTGRES_CREATE_OPENAQ_TABLES_FILE = 'dags/sql/create_openaq_tables.sql'
 
@@ -106,35 +107,34 @@ DEFAULT_ARGS = {
 #     Variable.delete('most_recent_openaq_data')
 #     Variable.set('most_recent_openaq_data', most_recent_day) #.strftime('%Y%m%d'))
 
-# def create_partition_tables() -> None:
-#     """
-#     Create partition tables for f_airpoll_data
-#     """
-#     start_year = datetime.strptime(OPENAQ_DATA_AVAILABLE_FROM, '%Y-%m-%d').year
-#     end_year = datetime.now().year
-#
-#     postgres = PostgresHook(POSTGRES_STAGING_CONN_ID)
-#     connection = postgres.get_conn()
-#     cursor = connection.cursor()
-#     for year in range(start_year, end_year+1):
-#         f_sql = SqlQueries.create_partition_table_cmd(
-#                     schema=f'{PRODUCTION_SCHEMA}',
-#                     table='f_climate_data',
-#                     year=year
-#                     )
-#         print(f'Debugging: {f_sql}')
-#         cursor.execute(f_sql)
-#     connection.commit()
+def create_partition_tables() -> None:
+    """
+    Create partition tables for f_airpoll_data
+    """
+    start_year = datetime.strptime(OPENAQ_DATA_AVAILABLE_FROM, '%Y-%m-%d').year
+    end_year = datetime.now().year
+
+    postgres = PostgresHook(POSTGRES_STAGING_CONN_ID)
+    connection = postgres.get_conn()
+    cursor = connection.cursor()
+    for year in range(start_year, end_year+1):
+        f_sql = SqlQueries.create_partition_table_cmd(
+                    schema=f'{PRODUCTION_SCHEMA}',
+                    table='f_airpoll_data',
+                    year=year
+                    )
+        cursor.execute(f_sql)
+    connection.commit()
 
 
 with DAG(OPENAQ_DAG_NAME,
           default_args = DEFAULT_ARGS,
           description = 'Load OPENAQ data from OPENAQ S3 to local Postgres',
-          catchup = False,
+          catchup = True,
           start_date = DEFAULT_START_DATE,
           concurrency = 8,
           max_active_runs = 8,
-          schedule_interval = '0 0 * * *' # run daily at midnight
+          schedule_interval = '0 23 * * *' # run daily at 23pm
         ) as dag:
 
     start_operator = DummyOperator(task_id='Begin_execution', dag=dag)
@@ -151,18 +151,19 @@ with DAG(OPENAQ_DAG_NAME,
                                           POSTGRES_CREATE_OPENAQ_TABLES_FILE),
             )
         # Populate d_kpi_names table with most relevant KPI names
-        # populate_kpi_names_table_operator = PostgresOperator(
-        #     task_id="populate_kpi_names_table",
-        #     postgres_conn_id=POSTGRES_STAGING_CONN_ID,
-        #     sql=SqlQueries.populate_d_kpi_table
-        # )
-        # # Create partition tables for f_climate_data
-        # create_partition_tables_operator = PythonOperator(
-        #     task_id = 'Create_partition_tables',
-        #     python_callable = create_partition_tables
-        #     )
-        # create_openaq_tables_operator >> populate_kpi_names_table_operator
-        # create_openaq_tables_operator >> create_partition_tables_operator
+        # --> in case this DAG runs before the noaa_dag
+        populate_kpi_names_table_operator = PostgresOperator(
+            task_id="populate_kpi_names_table",
+            postgres_conn_id=POSTGRES_STAGING_CONN_ID,
+            sql=SqlQueries.populate_d_kpi_table
+        )
+        # Create partition tables for f_climate_data
+        create_partition_tables_operator = PythonOperator(
+            task_id = 'Create_partition_tables',
+            python_callable = create_partition_tables
+            )
+        create_openaq_tables_operator >> populate_kpi_names_table_operator
+        create_openaq_tables_operator >> create_partition_tables_operator
 
     # -----------------------------------------------------
     # Run import of Dimension and Fact data in parallel
@@ -170,72 +171,54 @@ with DAG(OPENAQ_DAG_NAME,
     with TaskGroup("Run_file_import") as run_file_import:
         # Load relevant dimension and documentation files from the
         # OpenAQ S3 bucket into the local Staging Area (Filesystem)
-        with TaskGroup("download_openaq_files") as download_openaq_dims:
+        with TaskGroup("download_openaq_files") as download_openaq_files:
             download_openaq_files_operator = DownloadOpenAQFilesOperator(
                 # [:-4]: remove last four characters, i.e. file suffix '.txt'
                 task_id = f'Download_openaq_files',
                 aws_credentials = OPENAQ_AWS_CREDS,
                 s3_bucket = OPENAQ_S3_BUCKET,
-                #s3_prefix = f"{OPENAQ_S3_FACT_PREFIX}/"+"{{ ds }}",
-                s3_prefix = f"realtime-gzipped/"+"{{ ds }}",
-                local_path = OPENAQ_STAGING_DIM_RAW
+                s3_prefix = f"{OPENAQ_S3_FACT_PREFIX}/"+"{{ ds }}",
+                local_path = os.path.join(OPENAQ_STAGING_FACTS,
+                                          "{{ ds }}")
+                )
+            ##
+            ## Download the CMU station data here!
+            ##
+
+        with TaskGroup("reformat_openaq_files") as reformat_openaq_files:
+            reformat_openaq_files_operator = ReformatOpenAQJSONFilesOperator(
+                task_id = 'Reformat_openaq_files',
+                local_path_raw = os.path.join(OPENAQ_STAGING_FACTS,
+                                          "{{ ds }}"),
+                local_path_csv = os.path.join(OPENAQ_STAGING_FACTS,
+                                          "{{ ds }}"),
+                delimiter = f'{CSV_DELIMITER}',
+                quote = f'{CSV_QUOTE_CHAR}',
+                add_header = True,
+                file_pattern = '*.ndjson.gz',
+                gzipped = True
+            )
+
+        with TaskGroup("import_openaq_files") as import_openaq_files:
+            import_openaq_files_into_postgres_operator = LocalCSVToPostgresOperator(
+                task_id = f'Import_openaq_files_into_postgres',
+                postgres_conn_id = POSTGRES_STAGING_CONN_ID,
+                table = f'{OPENAQ_STAGING_SCHEMA}.f_air_data_raw',
+                delimiter = f'{CSV_DELIMITER}',
+                quote = f'{CSV_QUOTE_CHAR}',
+                truncate_table = False, #True,
+                local_path = os.path.join(OPENAQ_STAGING_FACTS,
+                                          "{{ ds }}"),
+                file_pattern = f'*.csv',
+                gzipped = False
                 )
 
-        # # Reformat the fixed-width files into a format that Postgresql can deal with
-        # with TaskGroup("reformat_openaq_dims") as reformat_openaq_dims:
-        #     s3_index = 2
-        #     reformat_openaq_countries_operator = ReformatFixedWidthFileOperator(
-        #         task_id = f'Reformat_{OPENAQ_S3_KEYS[s3_index][:-4]}_dim_file',
-        #         filename = OPENAQ_S3_KEYS[s3_index],
-        #         local_path_fixed_width = OPENAQ_STAGING_DIM_RAW,
-        #         local_path_csv = OPENAQ_STAGING_DIM_CSV,
-        #         column_names = ['country_id', 'country'],
-        #         column_positions = [0, 3],
-        #         delimiter = f'{CSV_DELIMITER}',
-        #         quote = f'{CSV_QUOTE_CHAR}',
-        #         add_header = True,
-        #         remove_original_file = False,
-        #         )
-        #
-        #     s3_index = 3
-        #     reformat_openaq_inventory_operator = ReformatFixedWidthFileOperator(
-        #         task_id = f'Reformat_{OPENAQ_S3_KEYS[s3_index][:-4]}_dim_file',
-        #         filename = OPENAQ_S3_KEYS[s3_index],
-        #         local_path_fixed_width = OPENAQ_STAGING_DIM_RAW,
-        #         local_path_csv = OPENAQ_STAGING_DIM_CSV,
-        #         column_names = ['id', 'latitude','longitude','element','from_year','until_year'],
-        #         column_positions = [0, 11, 20, 30, 35, 40],
-        #         delimiter = f'{CSV_DELIMITER}',
-        #         quote = f'{CSV_QUOTE_CHAR}',
-        #         add_header = True,
-        #         remove_original_file = False,
-        #         )
-        #
-        #     s3_index = 5
-        #     reformat_openaq_stations_operator = ReformatFixedWidthFileOperator(
-        #         task_id = f'Reformat_{OPENAQ_S3_KEYS[s3_index][:-4]}_dim_file',
-        #         filename = OPENAQ_S3_KEYS[s3_index],
-        #         local_path_fixed_width = OPENAQ_STAGING_DIM_RAW,
-        #         local_path_csv = OPENAQ_STAGING_DIM_CSV,
-        #         column_names = ['id','latitude','longitude','elevation',
-        #                       'state','name','gsn_flag','hcn_crn_flag','wmo_id'],
-        #         column_positions = [0, 11, 20, 30, 37, 40, 71, 75, 79],
-        #         delimiter = f'{CSV_DELIMITER}',
-        #         quote = f'{CSV_QUOTE_CHAR}',
-        #         add_header = True,
-        #         remove_original_file = False,
-        #         )
+        download_openaq_files >> reformat_openaq_files
+        reformat_openaq_files >>  import_openaq_files
 
-        # In case the data changed, load the OPENAQ dimension data from csv file on
-        # local Staging into the tables prepared on Staging Database (Postgresql)
-        #
-        # Currently, there is no mechanism to stop the import in case the staging
-        # files have not changed. Dimension data is hence reloaded every time the
-        # DAG is executed.
-        #
         # with TaskGroup("import_openaq_dims") as import_openaq_dims:
         #     s3_index = 2
-        #     import_openaq_country_operator = LocalStageToPostgresOperator(
+        #     import_openaq_country_operator = LocalCSVToPostgresOperator(
         #         task_id = f'Import_{OPENAQ_S3_KEYS[s3_index][:-4]}_into_postgres',
         #         postgres_conn_id = POSTGRES_STAGING_CONN_ID,
         #         table = f'{OPENAQ_STAGING_SCHEMA}.ghcnd_countries_raw',
@@ -271,12 +254,21 @@ with DAG(OPENAQ_DAG_NAME,
         #         gzipped = False
         #         )
         #
-        # # Run quality checks on dimension data
-        # check_dim_quality_operator = DataQualityOperator(
-        #     task_id='Check_dim_quality',
-        #     postgres_conn_id = POSTGRES_STAGING_CONN_ID,
-        #     dq_checks = DataQualityChecks.dq_checks_dim,
-        #     )
+        # Run quality checks on dimension data
+        check_openaq_quality_operator = DataQualityOperator(
+            task_id='Check_openaq_quality',
+            postgres_conn_id = POSTGRES_STAGING_CONN_ID,
+            dq_checks = DataQualityChecks.dq_checks_openaq,
+            )
+
+        with TaskGroup("Load_openaq_into_production") as load_openaq_into_production:
+            # Transfer raw tables to production tables
+            load_openaq_facts_operator = PostgresOperator(
+                task_id="load_openaq_facts",
+                postgres_conn_id=POSTGRES_STAGING_CONN_ID,
+                sql=SqlQueries.load_openaq_facts
+            )
+
         #
         # with TaskGroup("Load_dims_into_production") as load_dims_into_production:
         #     # Transfer raw tables to production tables

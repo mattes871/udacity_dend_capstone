@@ -8,15 +8,15 @@ from airflow.models import BaseOperator
 from airflow.utils.decorators import apply_defaults
 
 
-class LocalStageToPostgresOperator(BaseOperator):
+class LocalCSVToPostgresOperator(BaseOperator):
     """
     Import a (set of) csv files into an existing(!) table in a Postgresql
     database. Depending on the parameters, the table can be emptied before the
     import. The csv file(s) can be plain text or gzipped.
     """
-    
+
     ui_color = '#00FF99'
-    #template_fields=("s3_key",)
+    template_fields=("local_path",)
     copy_sql = """
                 BEGIN;
                 COPY {}
@@ -39,7 +39,7 @@ class LocalStageToPostgresOperator(BaseOperator):
                  gzipped: bool = False,
                  *args, **kwargs):
 
-        super(LocalStageToPostgresOperator, self).__init__(*args, **kwargs)
+        super(LocalCSVToPostgresOperator, self).__init__(*args, **kwargs)
         self.postgres_conn_id = postgres_conn_id
         self.table = table
         self.delimiter = delimiter
@@ -49,17 +49,6 @@ class LocalStageToPostgresOperator(BaseOperator):
         self.file_pattern, = file_pattern,
         self.gzipped = gzipped
 
-        print(f"""LocalStageToPostgresOperator:
-        {self.postgres_conn_id}
-        {self.table}
-        {self.delimiter}
-        {self.quote}
-        {self.truncate_table}
-        {self.local_path}
-        {self.file_pattern}
-        {self.gzipped}""")
-
-
     def execute(self, context: dict) -> None:
         """
         Copy csv data from local staging to postgres
@@ -67,7 +56,7 @@ class LocalStageToPostgresOperator(BaseOperator):
 
         def get_all_pattern_files(path: str, pattern: str) -> list:
             """ Return a list containing all *.csv files
-                from self.local_path 
+                from self.local_path
                 *pattern* could be e.g. '*.csv'
             """
 
@@ -84,18 +73,18 @@ class LocalStageToPostgresOperator(BaseOperator):
                 quote_str = f"QUOTE '{self.quote}'"
             else:
                 quote_str = ''
-            f_sql = LocalStageToPostgresOperator.copy_sql.format(
+            f_sql = LocalCSVToPostgresOperator.copy_sql.format(
                 self.table,
                 self.delimiter,
                 quote_str
             )
-            self.log.info(f'Execute SQL: \n{f_sql}')
+            self.log.debug(f'Execute SQL: \n{f_sql}')
             # Unzip file to temporary location if gzipped
             # Make sure to write somewhere we write-permission
             if self.gzipped:
                 tmp_filename = f'{csv_file}__{int(datetime.today().timestamp())}.tmp'
 
-                self.log.info(f'Unzipping {csv_file}')
+                self.log.debug(f'Unzipping {csv_file}')
                 with open(tmp_filename, 'wb') as f_out:
                     with gzip.open(csv_file, 'rb') as f_in:
                         shutil.copyfileobj(f_in, f_out)
@@ -105,31 +94,30 @@ class LocalStageToPostgresOperator(BaseOperator):
             result = postgres.copy_expert(f_sql, csv_file)
             # If file was unzipped to a temp file, remove the temp file
             if self.gzipped:
-                self.log.info(f"Removing '{tmp_filename}'")
+                self.log.debug(f"Removing '{tmp_filename}'")
                 os.remove(tmp_filename)
-            self.log.info(f'Result: {result}')
+            self.log.debug(f'Result: {result}')
             return result
 
 
-        self.log.info(f"Run LocalStageToPostgresOperator({self.table},\n"+
+        self.log.debug(f"Run LocalCSVToPostgresOperator({self.table},\n"+
                       f"    '{self.delimiter}',\n"+
                       f"    {self.local_path},\n"+
                       f"    {self.file_pattern},\n"+
+                      f"    {self.truncate_table},\n"+
                       f"    {self.gzipped})")
 
         postgres = PostgresHook(self.postgres_conn_id)
-
         # On truncate_table delete all existing data from postgres table
         # TRUNCATE TABLE is faster than DELETE FROM but does not allow any rollback
         if self.truncate_table:
-            self.log.info(f'Delete data from postgres table {self.table}')
+            self.log.debug(f'Delete data from postgres table {self.table}')
             #postgres.run(f'DELETE FROM {self.table}')
             postgres.run(f'TRUNCATE TABLE {self.table}')
+        else:
+            self.log.debug(f'No truncation of {self.table}')
 
         csv_files = get_all_pattern_files(self.local_path, self.file_pattern)
-
+        self.log.info(f"Found {len(csv_files)} files for import.")
         for csv_file in csv_files:
-            self.log.info(f'Import file {csv_file} into Postgres using copy_from')
             import_csv_data_into_postgres(postgres, csv_file)
-
-

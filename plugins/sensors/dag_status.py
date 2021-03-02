@@ -24,8 +24,13 @@ dag_name: pass the dag_id for your dag
 status_to_check: pass 'success' if you want sensor to return true for this.
 for e.g.
 
-dag_status_sensor = DagStatusSensor(dag_name='test_dag',status_to_check='success',task_id='dag_status_sensor',poke_interval=30,timeout=1800,dag=dag)
-
+dag_status_sensor = DagStatusSensor(
+            dag_name='test_dag',
+            status_to_check='success',
+            task_id='dag_status_sensor',
+            poke_interval=30,
+            timeout=1800,
+            dag=dag)
 """
 
 class DagStatusSensor(BaseSensorOperator):

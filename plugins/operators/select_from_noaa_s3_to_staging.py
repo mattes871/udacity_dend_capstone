@@ -9,7 +9,7 @@ from helpers.sql_queries import SqlQueries
 
 
 class SelectFromNOAAS3ToStagingOperator(BaseOperator):
-    """ 
+    """
     Select records for a specific day from the NOAA table file on Amazon S3.
     and write them onto the staging location as csv file.
     """
@@ -60,7 +60,7 @@ class SelectFromNOAAS3ToStagingOperator(BaseOperator):
 
 
     def execute(self, context: dict) -> None:
-        """ 
+        """
         Select all records for the **execution_date** day from the NOAA
         s3_table_file on Amazon S3 and store the records as a csv file on the
         local staging area under <local_path>/<real_date> If more than one csv
@@ -69,7 +69,7 @@ class SelectFromNOAAS3ToStagingOperator(BaseOperator):
         """
 
         def load_full_year(year: int, context: dict) -> None:
-            """ 
+            """
             Uses DownloadS3FileToStagingOperator to download full *year* csv.gz
             file from the NOAA archive onto the Staging Area.
             """
@@ -85,7 +85,7 @@ class SelectFromNOAAS3ToStagingOperator(BaseOperator):
 
 
         self.log.info(f'Executing SelectFromNOAAS3ToStagingOperator ...')
-        self.log.info(f'Params:\nMost recent: {self.most_recent_data_date},'+
+        self.log.debug(f'Params:\nMost recent: {self.most_recent_data_date},'+
                       f'\nExecution date: {self.execution_date},'+
                       f'\nBucket & Table File: {self.s3_bucket} + {self.s3_table_file}'+
                       f'\nStaging Location: {self.local_path}')
@@ -96,7 +96,7 @@ class SelectFromNOAAS3ToStagingOperator(BaseOperator):
         execution_date_year = datetime.strptime(self.execution_date,
                                                 '%Y-%m-%d').year
         if not os.path.exists(self.local_path):
-            self.log.info(f"Create Staging Location Folder '{self.local_path}'")
+            self.log.debug(f"Create Staging Location Folder '{self.local_path}'")
             os.makedirs(self.local_path)
 
         # Check if we need to backfill past years. In the NOAA
@@ -117,10 +117,6 @@ class SelectFromNOAAS3ToStagingOperator(BaseOperator):
         else:
             # Restrict to records that are newer than the 'most_recent'
             # record in the staging table
-            #
-            # >>>> WIP: What if 'most_recent' is in past year
-            # >>>>      records need to be loaded from different file
-            #
             where_clause = f"where s._2 >= '{self.most_recent_data_date}'"
             f_sql = f"""select s._1 as id,
                                s._2 as date_,
@@ -133,7 +129,7 @@ class SelectFromNOAAS3ToStagingOperator(BaseOperator):
                         from s3object s
                         {where_clause}
                         """
-            self.log.info(f_sql)
+            self.log.debug(f_sql)
             result = s3_hook.select_key(
                 key = f'{self.s3_prefix}/{self.s3_table_file}',
                 bucket_name = f'{self.s3_bucket}',
@@ -153,28 +149,15 @@ class SelectFromNOAAS3ToStagingOperator(BaseOperator):
                     }
                 )
             # Debug Output
-            self.log.info(f'Result length: {len(result)}')
-            self.log.info(f'Result[:512]: {result[:512]}')
+            self.log.debug(f'Result length: {len(result)}')
+            self.log.debug(f'Result[:512]: {result[:512]}')
             # Store results as csv file
             csv_file_name = os.path.join(self.local_path,
                                          f'{self.execution_date}')+'.csv'
-            self.log.info(f'Type of result: {type(result)}')
-            self.log.info(f'Write to file: {csv_file_name}')
+            self.log.debug(f'Type of result: {type(result)}')
+            self.log.debug(f'Write to file: {csv_file_name}')
             with open(csv_file_name,'w') as f:
                 #f.write(f'id,date_,element,data_value,m_flag,q_flag,s_flag,observ_time\n')
                 f.write(f'{result}')
 
-        #  # Check if file already exists and rename with timestamp-suffix
-        #  full_filename = os.path.join(self.staging_location, self.s3_file)
-        #  if os.path.isfile(full_filename):
-        #      archive_filename = f'{full_filename}__{int(datetime.today().timestamp())}'
-        #      self.log.info(f"""File '{full_filename}' already exists. Renaming to '{archive_filename}'""")
-        #      os.rename(full_filename,archive_filename)
-        #  tmp_filename = s3_hook.download_file(key=self.s3_key,
-        #                        bucket_name=self.s3_bucket,
-        #                        local_path=self.staging_location)
-        #  # Rename downloaded file
-        #  os.rename(os.path.join(self.staging_location, tmp_filename),
-        #            full_filename)
         self.log.info(f'SelectFromNOAAS3ToStagingOperator successful.')
-

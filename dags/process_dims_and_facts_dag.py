@@ -52,7 +52,7 @@ PROCESS_DAG_NAME =  dags_config['process_dag_name']
 ## Start date is yesterday, so that the scheduler starts the task when activated
 DEFAULT_START_DATE = datetime.today() - timedelta(days=1)
 
-POSTGRES_STAGING_CONN_ID = os.environ.get('POSTGRES_HOST')
+POSTGRES_STAGING_CONN_ID = 'postgres'
 POSTGRES_CREATE_FACT_TABLES_FILE = 'dags/sql/create_facts_tables.sql'
 
 

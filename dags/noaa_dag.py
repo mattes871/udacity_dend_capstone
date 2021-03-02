@@ -18,7 +18,7 @@ from operators.data_quality import DataQualityOperator
 from operators.reformat_fixed_width_file import ReformatFixedWidthFileOperator
 from operators.download_noaa_dim_file_to_staging import DownloadNOAADimFileToStagingOperator
 from operators.select_from_noaa_s3_to_staging import SelectFromNOAAS3ToStagingOperator
-from operators.local_stage_to_postgres import LocalStageToPostgresOperator
+from operators.local_csv_to_postgres import LocalCSVToPostgresOperator
 
 from helpers.sql_queries import SqlQueries
 from helpers.data_quality_checks import DataQualityChecks
@@ -67,7 +67,7 @@ NOAA_STAGING_FACTS = os.path.join(NOAA_STAGING_LOCATION,'facts')
 DEFAULT_START_DATE = datetime.today() - timedelta(days=1)
 
 ## 'postgres' is the name of the Airflow Connection to the Postgresql
-POSTGRES_STAGING_CONN_ID = os.environ.get('POSTGRES_HOST')
+POSTGRES_STAGING_CONN_ID = 'postgres'
 POSTGRES_CREATE_NOAA_TABLES_FILE = 'dags/sql/create_noaa_tables.sql'
 POSTGRES_CREATE_OPENAQ_TABLES_FILE = 'dags/sql/create_openaq_tables.sql'
 
@@ -134,7 +134,7 @@ with DAG(NOAA_DAG_NAME,
           start_date = DEFAULT_START_DATE,
           concurrency = 8,
           max_active_runs = 8,
-          schedule_interval = '0 0 * * *' # run daily at midnight
+          schedule_interval = '0 23 * * *' # run daily at midnight
         ) as dag:
 
     start_operator = DummyOperator(task_id='Begin_execution', dag=dag)
@@ -257,7 +257,7 @@ with DAG(NOAA_DAG_NAME,
         #
         with TaskGroup("import_noaa_dims") as import_noaa_dims:
             s3_index = 2
-            import_noaa_country_operator = LocalStageToPostgresOperator(
+            import_noaa_country_operator = LocalCSVToPostgresOperator(
                 task_id = f'Import_{NOAA_S3_KEYS[s3_index][:-4]}_into_postgres',
                 postgres_conn_id = POSTGRES_STAGING_CONN_ID,
                 table = f'{NOAA_STAGING_SCHEMA}.ghcnd_countries_raw',
@@ -269,7 +269,7 @@ with DAG(NOAA_DAG_NAME,
                 gzipped = False
                 )
             s3_index = 3
-            import_noaa_inventory_operator = LocalStageToPostgresOperator(
+            import_noaa_inventory_operator = LocalCSVToPostgresOperator(
                 task_id = f'Import_{NOAA_S3_KEYS[s3_index][:-4]}_into_postgres',
                 postgres_conn_id = POSTGRES_STAGING_CONN_ID,
                 table = f'{NOAA_STAGING_SCHEMA}.ghcnd_inventory_raw',
@@ -281,7 +281,7 @@ with DAG(NOAA_DAG_NAME,
                 gzipped = False
                 )
             s3_index = 5
-            import_noaa_stations_operator = LocalStageToPostgresOperator(
+            import_noaa_stations_operator = LocalCSVToPostgresOperator(
                 task_id = f'Import_{NOAA_S3_KEYS[s3_index][:-4]}_into_postgres',
                 postgres_conn_id = POSTGRES_STAGING_CONN_ID,
                 table = f'{NOAA_STAGING_SCHEMA}.ghcnd_stations_raw',
@@ -297,7 +297,7 @@ with DAG(NOAA_DAG_NAME,
         check_dim_quality_operator = DataQualityOperator(
             task_id='Check_dim_quality',
             postgres_conn_id = POSTGRES_STAGING_CONN_ID,
-            dq_checks = DataQualityChecks.dq_checks_dim,
+            dq_checks = DataQualityChecks.dq_checks_noaa_dim,
             )
 
         with TaskGroup("Load_dims_into_production") as load_dims_into_production:
@@ -362,7 +362,7 @@ with DAG(NOAA_DAG_NAME,
 
         # Load the NOAA fact data for {{ DS }} from csv file on local Staging
         # into the tables prepared on Staging Database (Postgresql)
-        load_noaa_fact_tables_into_postgres_operator = LocalStageToPostgresOperator(
+        load_noaa_fact_tables_into_postgres_operator = LocalCSVToPostgresOperator(
             task_id = 'Load_noaa_fact_tables_into_postgres',
             postgres_conn_id = POSTGRES_STAGING_CONN_ID,
             table = f'{NOAA_STAGING_SCHEMA}.f_weather_data_raw',
@@ -377,7 +377,7 @@ with DAG(NOAA_DAG_NAME,
         check_fact_quality_operator = DataQualityOperator(
             task_id='Check_fact_quality',
             postgres_conn_id = POSTGRES_STAGING_CONN_ID,
-            dq_checks = DataQualityChecks.dq_checks_facts,
+            dq_checks = DataQualityChecks.dq_checks_noaa_facts,
             )
 
         # Finally, insert quality-checked data from Postgres Staging

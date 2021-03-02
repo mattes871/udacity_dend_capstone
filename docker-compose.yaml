@@ -10,12 +10,14 @@ volumes:
   airflow_logs:
 
 services:
-  postgres:
+  airflow_postgres:
     image: postgres:12
+    hostname: airflow_postgres
     environment:
       - POSTGRES_USER=airflow
       - POSTGRES_PASSWORD=airflow
       - POSTGRES_DB=airflow
+      - POSTGRES_HOST=airflow_postgres
     ports:
         # Host port=5433 because other Postgres is running on 5432
       - "5433:5432"
@@ -25,17 +27,17 @@ services:
       # Mount to a docker volume for better performance (less caching)
       - postgresql_12_data:/var/lib/postgresql/data
 
-  webserver:
+  airflow_webserver:
     image: apache/airflow:latest
-    hostname: webserver
+    hostname: airflow_webserver
     restart: always
     depends_on:
-      - postgres
+      - airflow_postgres
     environment:
       - POSTGRES_USER=airflow
       - POSTGRES_DB=airflow
       - POSTGRES_PASSWORD=airflow
-      - POSTGRES_HOST=postgres
+      - POSTGRES_HOST=airflow_postgres
       - AWS_KEY=${AWS_KEY}
       - AWS_SECRET=${AWS_SECRET}
       - AWS_SECRET_URI=${AWS_SECRET_URI}
@@ -59,17 +61,17 @@ services:
       timeout:  30s
       retries:  32
 
-  scheduler:
+  airflow_scheduler:
     image: apache/airflow:latest
     restart: always
     depends_on:
-      - postgres
-      - webserver
+      - airflow_postgres
+      - airflow_webserver
     environment:
       - POSTGRES_USER=airflow
       - POSTGRES_DB=airflow
       - POSTGRES_PASSWORD=airflow
-      - POSTGRES_HOST=postgres
+      - POSTGRES_HOST=airflow_postgres
       - AWS_KEY=${AWS_KEY}
       - AWS_SECRET=${AWS_SECRET}
       - AWS_REGION=${AWS_REGION}
@@ -91,5 +93,3 @@ services:
       interval: 120s
       timeout:  30s
       retries:  9
-
-

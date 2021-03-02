@@ -26,10 +26,11 @@ file gets daily updates appended
 See https://docs.opendata.aws/noaa-ghcn-pds/readme.html for more details.
 
 ### OpenAQ dataset
-**Scope**: 160,000 stations worldwide, partially dating back until 1763
-**Measures**: 5 core KPIs (Min/Max temperature, precipitation, snowfall, snow depth), 50+ further KPIs
+**Scope**: 8,000 stations in 90 countries with daily and intradaily data back to 2013; > 1.5 Mio measurements per day
+**Measures**: 7 different KPIs  
+5 core KPIs (Min/Max temperature, precipitation, snowfall, snow depth), 50+ further KPIs
 **Source platform**: AWS S3 bucket
-**File structure**: One file per station per day. Separate directory for every day since Nov 2013.
+**File structure**: Separate directory for every day since Nov 2013. Set of .ndjson-Files per day.
 **Format**: ndjson, ndjson.gz
 **Downloads**: https://openaq-fetches.s3.amazonaws.com/index.html
 
@@ -75,10 +76,11 @@ Taking these non-technical constraints into account, a local solution based on D
 
 ### Airflow 2.0
 Airflow is one of the standard frameworks for orchestrating workflows in data
-engineering. As Airflow is now also supporting Kubernetes, it seems to be a safe choice in terms of computational scalability. In my local implementation, however, Airflow has to make do with a LinearExecutor and maximum 10 Cores. I chose Airflow version 2.0 because of the much more reliable grouping of sub tasks in contrast to the older SubDAG feature.   
+engineering. As Airflow is now also supporting Kubernetes, it seems to be a safe choice in terms of computational scalability. In my local implementation, however, Airflow has to make do with a LinearExecutor and maximum 10 Cores. I chose Airflow version 2.0 because of the much more reliable grouping of sub tasks using *TaskGroup*s in contrast to the older SubDAG feature.   
 
 ### Postgresql 12
 Postgresql is my standard choice whenever there is no apparent reason to go for a more specialized non-SQL database. In this use-case, the goal is to provide a multi-purpose database, a flexible basis for reporting, analysis and extraction of data. Thus, a relational database seems a good choice. With further improved performance and scalability in versions 12 and above, Postgresql works well even on very large datasets - given that indexes and partitions are designed well.
+In case of even larger data volumes, Hive could be an alternative.
 
 ### Docker & Docker Compose
 Using Docker and 'docker-compose' is a very elegant and convenient way to set up
@@ -168,13 +170,15 @@ where the `docker-compose up` is executed.  In my project folder, I created a
 > export AWS_SECRET='<your-secret-here>'
 > export AWS_SECRET_URI=<url-encoded version of the AWS_SECRET>
 
-If you store this as a '.sh'-file, do not forget to exclude this file from git
+If you store this as a '.sh'-file, do not forget to exclude the file from git
 (using .gitignore).
 
-The 'docker-compose.yaml' picks these variables up and provides them for use
+The 'docker-compose.yaml' picks up these variables and provides them for use
 inside the docker containers.
 
 No further credentials for external platforms are needed to run the project demo. Even the AWS credentials might not be necessary in case of publicly accessible S3 buckets. Nevertheless, it shows how to pass credentials into the container without writing them down in code.
+
+Please note, that the Postgresql database is provided in a rudimentary installation with only the *airflow* user set up - for the purpose of this demo project.  For a production deployment, some more work needed to be invested here.
 
 ### NOAA and OpenAQ DAGs
 For each data source, a separate DAG is defined orchestrating the ETL process end-2-end.  The various configuration parameters for each data source are specified in a json file each. These configurations are loaded into Airflow variables when the Airflow webserver starts. Changes to the configuration require a restart of the webserver.
@@ -197,7 +201,7 @@ All *.csv* files should now be in the same format and ready for direct import in
 
 
 #### Ingesting data from local Filesystem into Postgres
-The *.csv* files from the local filesystem are loaded into Postgres using the *COPY_FROM* import functionality (*LocalStageToPostgresOperator*).
+The *.csv* files from the local filesystem are loaded into Postgres using the *COPY_FROM* import functionality (*LocalCSVToPostgresOperator*).
 
 #### Quality Checks on Staging Data
 Data quality checks should be performed on the data in the Postgres staging area. While there are many tools for data manipulation also on the filesystem level, it seems much more appropriate for large data volumes to do this step based on Postgres or other database platforms.

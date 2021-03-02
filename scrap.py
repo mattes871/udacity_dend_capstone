@@ -21,27 +21,27 @@ response = s3_client.head_object(Bucket='noaa-ghcn-pds', Key='status.txt')
 
 
 {'ResponseMetadata': {
-    'RequestId': 'F0C7A31AC0DEAC7D', 
-    'HostId': 'RZEaVcCun5cBcpDrkP9FyP7sEMdpfrn2ff4Wl6Z+bFy5dOshAGfM5FIhfq3XRoXaaZVtM5t0I7E=', 
-    'HTTPStatusCode': 200, 
+    'RequestId': 'F0C7A31AC0DEAC7D',
+    'HostId': 'RZEaVcCun5cBcpDrkP9FyP7sEMdpfrn2ff4Wl6Z+bFy5dOshAGfM5FIhfq3XRoXaaZVtM5t0I7E=',
+    'HTTPStatusCode': 200,
     'HTTPHeaders': {
-        'x-amz-id-2': 'RZEaVcCun5cBcpDrkP9FyP7sEMdpfrn2ff4Wl6Z+bFy5dOshAGfM5FIhfq3XRoXaaZVtM5t0I7E=', 
-        'x-amz-request-id': 'F0C7A31AC0DEAC7D', 
-        'date': 'Mon, 22 Feb 2021 11:28:50 GMT', 
-        'last-modified': 'Tue, 02 Feb 2021 02:14:25 GMT', 
-        'etag': '"11e3d6413aa0d5c27687f1d61b7c7cd9"', 
-        'content-disposition': 'status.txt', 
-        'accept-ranges': 'bytes', 
-        'content-type': 'application/octet-stream', 
-        'content-length': '34578', 
-        'server': 'AmazonS3'}, 
-    'RetryAttempts': 0}, 
-'AcceptRanges': 'bytes', 
+        'x-amz-id-2': 'RZEaVcCun5cBcpDrkP9FyP7sEMdpfrn2ff4Wl6Z+bFy5dOshAGfM5FIhfq3XRoXaaZVtM5t0I7E=',
+        'x-amz-request-id': 'F0C7A31AC0DEAC7D',
+        'date': 'Mon, 22 Feb 2021 11:28:50 GMT',
+        'last-modified': 'Tue, 02 Feb 2021 02:14:25 GMT',
+        'etag': '"11e3d6413aa0d5c27687f1d61b7c7cd9"',
+        'content-disposition': 'status.txt',
+        'accept-ranges': 'bytes',
+        'content-type': 'application/octet-stream',
+        'content-length': '34578',
+        'server': 'AmazonS3'},
+    'RetryAttempts': 0},
+'AcceptRanges': 'bytes',
 'LastModified': datetime.datetime(2021, 2, 2, 2, 14, 25, tzinfo=tzutc()),
-'ContentLength': 34578, 
-'ETag': '"11e3d6413aa0d5c27687f1d61b7c7cd9"', 
-'ContentDisposition': 'status.txt', 
-'ContentType': 'application/octet-stream', 
+'ContentLength': 34578,
+'ETag': '"11e3d6413aa0d5c27687f1d61b7c7cd9"',
+'ContentDisposition': 'status.txt',
+'ContentType': 'application/octet-stream',
 'Metadata': {}}
 
 
@@ -107,3 +107,42 @@ result = s3_hook.read_key(
     key = "csv/2021.csv",
     bucket_name = "noaa-ghcn-pds",
     )
+
+
+
+from datetime import datetime
+from airflow import DAG
+from airflow.operators.dummy_operator import DummyOperator
+from airflow.sensors.external_task_sensor import ExternalTaskSensor
+
+dag = DAG('dependency_dag', description='DAG with sensor', schedule_interval='* * * * *',
+          start_date=datetime(2019, 7, 10))
+
+sensor = ExternalTaskSensor(task_id='dag_sensor',
+    external_dag_id = 'another_dag_id',
+    external_task_id = None, dag=dag, mode = 'reschedule')
+
+task = DummyOperator(task_id='some_task', retries=1, dag=dag)
+
+task.set_upstream(sensor)
+
+
+import os
+import boto3
+from dateutil.tz import tzutc
+from datetime import date, datetime, timezone
+from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+from airflow.models import BaseOperator
+from airflow.utils.decorators import apply_defaults
+
+from operators.download_s3_file_to_staging import DownloadS3FileToStagingOperator
+s3_hook = S3Hook(aws_conn_id = 'aws_credentials')
+
+all_files = s3_hook.list_keys(bucket_name='openaq-fetches',
+                              prefix='realtime-gzipped/2021-01-23/',
+                              delimiter='/',
+                              max_items=99)
+all_files = s3_hook.list_prefixes(bucket_name='openaq-fetches',
+                              prefix='realtime-gzipped/',
+                              delimiter='/',
+                              max_items=99)

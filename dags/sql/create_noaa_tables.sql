@@ -63,7 +63,7 @@ CREATE INDEX IF NOT EXISTS f_weather_data_raw_ind
 CREATE SCHEMA IF NOT EXISTS production ;
 
 CREATE TABLE IF NOT EXISTS production.d_stations (
-    unique_id varchar(16) NOT NULL,
+    station_id varchar(16) NOT NULL,
     source varchar(4) NOT NULL,
     latitude numeric (10,7),
     longitude numeric (10,7),
@@ -73,16 +73,16 @@ CREATE TABLE IF NOT EXISTS production.d_stations (
     --gsn_flag varchar(3),
     --hcn_crn_flag varchar(3),
     --wmo_id varchar(5),
-    PRIMARY KEY (unique_id)
+    PRIMARY KEY (station_id)
 );
 
 CREATE TABLE IF NOT EXISTS production.d_inventory (
-    unique_id varchar(16) NOT NULL,
+    station_id varchar(16) NOT NULL,
     source varchar(4) NOT NULL,
     common_kpi_name varchar(4) NOT NULL,
     from_year varchar(4),
     until_year varchar(4),
-    PRIMARY KEY (unique_id, common_kpi_name)
+    PRIMARY KEY (station_id, common_kpi_name)
 );
 
 CREATE TABLE IF NOT EXISTS production.d_countries (
@@ -94,14 +94,14 @@ CREATE TABLE IF NOT EXISTS production.d_countries (
 
 
 CREATE TABLE IF NOT EXISTS production.f_climate_data (
-    unique_id varchar(16) NOT NULL, -- source-prefix + source-id
+    station_id varchar(16) NOT NULL, -- source-prefix + source-id
     source varchar(4) NOT NULL,
     -- country_id varchar(2) NOT NULL,
     date_ date NOT NULL,
     common_kpi_name varchar(4),     -- harmonized kpi_name, using a lookup table
     data_value integer,             -- in noaa only integer values
     observ_time varchar(4),
-    PRIMARY KEY (unique_id, date_, common_kpi_name)
+    PRIMARY KEY (station_id, date_, common_kpi_name)
 )   PARTITION BY RANGE (date_)
 ;
 
