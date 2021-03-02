@@ -1,6 +1,6 @@
 {
     "dags": {
-        "process_dag_name": "process_dims_and_facts_dag",
+        "process_dag_name": "process_example_dag",
         "noaa_dag_name": "noaa_dag",
         "openaq_dag_name": "openaq_dag"
     },

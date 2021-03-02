@@ -16,10 +16,9 @@ from airflow.providers.postgres.operators.postgres import PostgresOperator
 from operators.create_tables import CreateTablesOperator
 from operators.data_quality import DataQualityOperator
 from operators.reformat_fixed_width_file import ReformatFixedWidthFileOperator
-from operators.download_openaq_files import DownloadOpenAQFilesOperator
-#from operators.select_from_openaq_s3_to_staging import SelectFromOpenAQS3ToStagingOperator
 from operators.local_csv_to_postgres import LocalCSVToPostgresOperator
-from operators.reformat_openaq_json_files import ReformatOpenAQJSONFilesOperator
+from operators.openaq.download_openaq_files import DownloadOpenAQFilesOperator
+from operators.openaq.reformat_openaq_json_files import ReformatOpenAQJSONFilesOperator
 
 from helpers.sql_queries import SqlQueries
 from helpers.data_quality_checks import DataQualityChecks
@@ -155,7 +154,7 @@ with DAG(OPENAQ_DAG_NAME,
         populate_kpi_names_table_operator = PostgresOperator(
             task_id="populate_kpi_names_table",
             postgres_conn_id=POSTGRES_STAGING_CONN_ID,
-            sql=SqlQueries.populate_d_kpi_table
+            sql=SqlQueries.openaq_populate_d_kpi_table
         )
         # Create partition tables for f_climate_data
         create_partition_tables_operator = PythonOperator(
@@ -216,58 +215,23 @@ with DAG(OPENAQ_DAG_NAME,
         download_openaq_files >> reformat_openaq_files
         reformat_openaq_files >>  import_openaq_files
 
-        # with TaskGroup("import_openaq_dims") as import_openaq_dims:
-        #     s3_index = 2
-        #     import_openaq_country_operator = LocalCSVToPostgresOperator(
-        #         task_id = f'Import_{OPENAQ_S3_KEYS[s3_index][:-4]}_into_postgres',
-        #         postgres_conn_id = POSTGRES_STAGING_CONN_ID,
-        #         table = f'{OPENAQ_STAGING_SCHEMA}.ghcnd_countries_raw',
-        #         delimiter = f'{CSV_DELIMITER}',
-        #         quote = f'{CSV_QUOTE_CHAR}',
-        #         truncate_table = True,
-        #         local_path = OPENAQ_STAGING_DIM_CSV,
-        #         file_pattern = f'{OPENAQ_S3_KEYS[s3_index]}',
-        #         gzipped = False
-        #         )
-        #     s3_index = 3
-        #     import_openaq_inventory_operator = LocalStageToPostgresOperator(
-        #         task_id = f'Import_{OPENAQ_S3_KEYS[s3_index][:-4]}_into_postgres',
-        #         postgres_conn_id = POSTGRES_STAGING_CONN_ID,
-        #         table = f'{OPENAQ_STAGING_SCHEMA}.ghcnd_inventory_raw',
-        #         delimiter = f'{CSV_DELIMITER}',
-        #         quote = f'{CSV_QUOTE_CHAR}',
-        #         truncate_table = True,
-        #         local_path = OPENAQ_STAGING_DIM_CSV,
-        #         file_pattern = f'{OPENAQ_S3_KEYS[s3_index]}',
-        #         gzipped = False
-        #         )
-        #     s3_index = 5
-        #     import_openaq_stations_operator = LocalStageToPostgresOperator(
-        #         task_id = f'Import_{OPENAQ_S3_KEYS[s3_index][:-4]}_into_postgres',
-        #         postgres_conn_id = POSTGRES_STAGING_CONN_ID,
-        #         table = f'{OPENAQ_STAGING_SCHEMA}.ghcnd_stations_raw',
-        #         delimiter = f'{CSV_DELIMITER}',
-        #         quote = f'{CSV_QUOTE_CHAR}',
-        #         truncate_table = True,
-        #         local_path = OPENAQ_STAGING_DIM_CSV,
-        #         file_pattern = f'{OPENAQ_S3_KEYS[s3_index]}',
-        #         gzipped = False
-        #         )
+        # # Run quality checks on dimension data
+        # check_openaq_quality_operator = DataQualityOperator(
+        #     task_id='Check_openaq_quality',
+        #     postgres_conn_id = POSTGRES_STAGING_CONN_ID,
+        #     dq_checks = DataQualityChecks.dq_checks_openaq,
+        #     )
         #
-        # Run quality checks on dimension data
-        check_openaq_quality_operator = DataQualityOperator(
-            task_id='Check_openaq_quality',
-            postgres_conn_id = POSTGRES_STAGING_CONN_ID,
-            dq_checks = DataQualityChecks.dq_checks_openaq,
-            )
+        # with TaskGroup("Load_openaq_into_production") as load_openaq_into_production:
+        #     # Transfer raw tables to production tables
+        #     load_openaq_facts_operator = PostgresOperator(
+        #         task_id="load_openaq_facts",
+        #         postgres_conn_id=POSTGRES_STAGING_CONN_ID,
+        #         sql=SqlQueries.load_openaq_facts
+        #     )
+        # import_openaq_files >> check_openaq_quality_operator
+        # check_openaq_quality_operator >> load_openaq_into_production
 
-        with TaskGroup("Load_openaq_into_production") as load_openaq_into_production:
-            # Transfer raw tables to production tables
-            load_openaq_facts_operator = PostgresOperator(
-                task_id="load_openaq_facts",
-                postgres_conn_id=POSTGRES_STAGING_CONN_ID,
-                sql=SqlQueries.load_openaq_facts
-            )
 
         #
         # with TaskGroup("Load_dims_into_production") as load_dims_into_production:

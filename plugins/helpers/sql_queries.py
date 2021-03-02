@@ -12,7 +12,7 @@ class SqlQueries:
     PRODUCTION_SCHEMA = general_config['production_schema']
 
 
-    most_recent_noaa_data = (f"""
+    noaa_most_recent_data = (f"""
         SELECT to_char(max(date_),'YYYY-MM-DD') as max_date_str
               FROM {PRODUCTION_SCHEMA}.f_climate_data
               WHERE source = 'noaa' ;
@@ -20,7 +20,7 @@ class SqlQueries:
 
     # Use only the 5 most relevant KPIs from NOAA, 65 additional KPIs can be found
     # in that source.
-    populate_d_kpi_table = (f"""
+    noaa_populate_d_kpi_table = (f"""
         INSERT INTO {PRODUCTION_SCHEMA}.d_kpi_names (
             orig_kpi_name, common_kpi_name, source, description)
         VALUES
@@ -29,7 +29,20 @@ class SqlQueries:
            ('SNWD', 'SNWD', 'noaa', 'Snow depth (mm)'),
            ('TMAX', 'TMAX', 'noaa', 'Maximum temperature (tenths of degrees C)'),
            ('TMIN', 'TMIN', 'noaa', 'Minimum temperature (tenths of degrees C)')
-        ON CONFLICT (orig_kpi_name) DO NOTHING ;
+        ON CONFLICT (orig_kpi_name, source) DO NOTHING ;
+        """)
+
+    # Use only the 5 most relevant KPIs from OpenAQ
+    openaq_populate_d_kpi_table = (f"""
+        INSERT INTO {PRODUCTION_SCHEMA}.d_kpi_names (
+            orig_kpi_name, common_kpi_name, source, description)
+        VALUES
+           ('o3', 'O3', 'opaq', 'Ozone'),
+           ('pm25', 'PM25', 'opaq', '???'),
+           ('pm10', 'PM10', 'opaq', '???'),
+           ('co', 'CO', 'opaq', 'Carbonmonoxide'),
+           ('no2', 'NO2', 'opaq', 'Nitrogene dioxide')
+        ON CONFLICT (orig_kpi_name, source) DO NOTHING ;
         """)
 
     load_noaa_stations = (f"""

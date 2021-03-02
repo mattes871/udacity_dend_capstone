@@ -16,9 +16,10 @@ from airflow.providers.postgres.operators.postgres import PostgresOperator
 from operators.create_tables import CreateTablesOperator
 from operators.data_quality import DataQualityOperator
 from operators.reformat_fixed_width_file import ReformatFixedWidthFileOperator
-from operators.download_noaa_dim_file_to_staging import DownloadNOAADimFileToStagingOperator
-from operators.select_from_noaa_s3_to_staging import SelectFromNOAAS3ToStagingOperator
 from operators.local_csv_to_postgres import LocalCSVToPostgresOperator
+from operators.get_most_recent_data_date import GetMostRecentDataDateOperator
+from operators.noaa.download_noaa_dim_file_to_staging import DownloadNOAADimFileToStagingOperator
+from operators.noaa.select_from_noaa_s3_to_staging import SelectFromNOAAS3ToStagingOperator
 
 from helpers.sql_queries import SqlQueries
 from helpers.data_quality_checks import DataQualityChecks
@@ -82,29 +83,29 @@ DEFAULT_ARGS = {
     'region': AWS_REGION
 }
 
-def get_date_of_most_recent_noaa_facts() -> None:
-    """
-    Get the date of the most recent fact in the noaa_staging_schema.weather_data_raw data
-    from postgres and set *most_recent_noaa_data* variable in airflow
-    """
-
-    # Get date of most recent data from production table
-    postgres = PostgresHook(POSTGRES_STAGING_CONN_ID)
-    connection = postgres.get_conn()
-    cursor = connection.cursor()
-    cursor.execute(SqlQueries.most_recent_noaa_data)
-    most_recent = cursor.fetchone()
-    try:
-        most_recent_day = datetime.strptime(most_recent[0],'%Y%m%d')
-    except:
-        most_recent_day = NOAA_DATA_AVAILABLE_FROM
-    else:
-        # Add one day to avoid complications with
-        # Dec 31st dates
-        most_recent_day += timedelta(days=1)
-    print(f'Most recent NOAA data is as of: {most_recent_day}')
-    Variable.delete('most_recent_noaa_data')
-    Variable.set('most_recent_noaa_data', most_recent_day) #.strftime('%Y%m%d'))
+# def get_date_of_most_recent_noaa_facts() -> None:
+#     """
+#     Get the date of the most recent fact in the noaa_staging_schema.weather_data_raw data
+#     from postgres and set *noaa_most_recent_data* variable in airflow
+#     """
+#
+#     # Get date of most recent data from production table
+#     postgres = PostgresHook(POSTGRES_STAGING_CONN_ID)
+#     connection = postgres.get_conn()
+#     cursor = connection.cursor()
+#     cursor.execute(SqlQueries.noaa_most_recent_data)
+#     most_recent = cursor.fetchone()
+#     try:
+#         most_recent_day = datetime.strptime(most_recent[0],'%Y%m%d')
+#     except:
+#         most_recent_day = NOAA_DATA_AVAILABLE_FROM
+#     else:
+#         # Add one day to avoid complications with
+#         # Dec 31st dates
+#         most_recent_day += timedelta(days=1)
+#     print(f'Most recent NOAA data is as of: {most_recent_day}')
+#     Variable.delete('noaa_most_recent_data')
+#     Variable.set('noaa_most_recent_data', most_recent_day) #.strftime('%Y%m%d'))
 
 def create_partition_tables() -> None:
     """
@@ -122,7 +123,6 @@ def create_partition_tables() -> None:
                     table='f_climate_data',
                     year=year
                     )
-        print(f'Debugging: {f_sql}')
         cursor.execute(f_sql)
     connection.commit()
 
@@ -154,7 +154,7 @@ with DAG(NOAA_DAG_NAME,
         populate_kpi_names_table_operator = PostgresOperator(
             task_id="populate_kpi_names_table",
             postgres_conn_id=POSTGRES_STAGING_CONN_ID,
-            sql=SqlQueries.populate_d_kpi_table
+            sql=SqlQueries.noaa_populate_d_kpi_table
         )
         # Create partition tables for f_climate_data
         create_partition_tables_operator = PythonOperator(
@@ -339,10 +339,19 @@ with DAG(NOAA_DAG_NAME,
     with TaskGroup("Run_fact_import") as run_facts_import:
 
         # Get date of most recent NOAA data in the Postgres production tables
-        get_date_of_most_recent_noaa_facts_operator = PythonOperator(
-            task_id = 'Get_date_of_most_recent_noaa_facts',
-            python_callable = get_date_of_most_recent_noaa_facts
+        get_most_recent_noaa_data_date_operator = GetMostRecentDataDateOperator(
+            task_id = 'Get_date_of_most_recent_noaa_fact',
+            postgres_conn_id = POSTGRES_STAGING_CONN_ID,
+            schema = PRODUCTION_SCHEMA,
+            table = 'f_climate_data',
+            where_clause = "source = 'noaa'",
+            date_field = 'date_',
+            airflow_var_name = 'noaa_most_recent_data'
             )
+        # get_date_of_most_recent_noaa_facts_operator = PythonOperator(
+        #     task_id = 'Get_date_of_most_recent_noaa_facts',
+        #     python_callable = get_date_of_most_recent_noaa_facts
+        #     )
 
         # Select all facts for date == {{ DS }} from the NOAA S3 bucket
         # and store them as a csv file in the local Staging Area (Filesystem)
@@ -352,7 +361,7 @@ with DAG(NOAA_DAG_NAME,
             s3_bucket = NOAA_S3_BUCKET,
             s3_prefix = NOAA_S3_FACT_PREFIX,
             s3_table_file = '{{ execution_date.year }}.csv.gz',
-            most_recent_data_date = '{{ var.value.most_recent_noaa_data }}',
+            most_recent_data_date = '{{ var.value.noaa_most_recent_data }}',
             execution_date = '{{ ds }}',
             real_date = date.today().strftime('%Y-%m-%d'),
             local_path = NOAA_STAGING_FACTS,
@@ -390,7 +399,7 @@ with DAG(NOAA_DAG_NAME,
         # ............................................
         # Defining TaskGroup DAG
         # ............................................
-        get_date_of_most_recent_noaa_facts_operator >> select_noaa_data_from_s3_operator
+        get_most_recent_noaa_data_date_operator >> select_noaa_data_from_s3_operator
         select_noaa_data_from_s3_operator >> load_noaa_fact_tables_into_postgres_operator
         load_noaa_fact_tables_into_postgres_operator >> check_fact_quality_operator
         check_fact_quality_operator >> transform_noaa_facts_operator

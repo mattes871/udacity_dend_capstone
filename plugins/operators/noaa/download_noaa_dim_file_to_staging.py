@@ -8,7 +8,9 @@ from airflow.utils.decorators import apply_defaults
 
 from operators.download_s3_file_to_staging import DownloadS3FileToStagingOperator
 
-class DownloadOpenAQFileOperator(DownloadS3FileToStagingOperator):
+
+
+class DownloadNOAADimFileToStagingOperator(DownloadS3FileToStagingOperator):
     """
     Specialisation of the DownloadS3File Operator.
     In case functionality specific to the NOAA dimension files need to be
@@ -39,7 +41,7 @@ class DownloadOpenAQFileOperator(DownloadS3FileToStagingOperator):
                  replace_existing: bool = True,
                  *args, **kwargs):
 
-        super(DownloadOpenAQFileOperator, self).__init__(
+        super(DownloadNOAADimFileToStagingOperator, self).__init__(
             aws_credentials=aws_credentials,
             s3_bucket=s3_bucket,
             s3_prefix=s3_prefix,

@@ -7,7 +7,7 @@ from airflow.models import BaseOperator
 from airflow.utils.decorators import apply_defaults
 
 class ReformatFixedWidthFileOperator(BaseOperator):
-    """ 
+    """
     Open *local_path*/*filename* and transform the fixed-width format into a csv
     format with given delimiter. Add a header line for better readability in
     case of manual inspection of the staging area files.
@@ -42,24 +42,24 @@ class ReformatFixedWidthFileOperator(BaseOperator):
         self.quote = quote
         self.add_header = add_header
         self.remove_original_file = remove_original_file
-        print(f"""ReformatFixedWidthFileOperator:
-        {self.filename}
-        {self.local_path_fixed_width}
-        {self.local_path_csv}
-        {self.column_names}
-        {self.column_positions}
-        {self.delimiter}
-        {self.quote}
-        {self.add_header}
-        {self.remove_original_file}
-        """)
+        # print(f"""ReformatFixedWidthFileOperator:
+        # {self.filename}
+        # {self.local_path_fixed_width}
+        # {self.local_path_csv}
+        # {self.column_names}
+        # {self.column_positions}
+        # {self.delimiter}
+        # {self.quote}
+        # {self.add_header}
+        # {self.remove_original_file}
+        # """)
 
     def execute(self, context: dict) -> None:
-        """ 
+        """
         Run the transformation from fixed-width to csv format
         """
 
-        def reformat_file(filename: str, 
+        def reformat_file(filename: str,
                           local_path_fixed_width: str,
                           local_path_csv: str,
                           column_names: list,
@@ -83,7 +83,7 @@ class ReformatFixedWidthFileOperator(BaseOperator):
                 self.log.info(f"Creating path '{local_path_csv}'")
                 os.makedirs(local_path_csv)
 
-            # Assuming that the local fw file exists 
+            # Assuming that the local fw file exists
             assert os.path.isfile(full_fw_filename), f"'{full_fw_filename}' does not exist"
 
             # Append max line lenght for splitting
@@ -122,6 +122,6 @@ class ReformatFixedWidthFileOperator(BaseOperator):
         reformat_file(self.filename, self.local_path_fixed_width,
                       self.local_path_csv, self.column_names,
                       self.column_positions,
-                      self.delimiter, self.quote, 
+                      self.delimiter, self.quote,
                       self.remove_original_file,
                       self.add_header)

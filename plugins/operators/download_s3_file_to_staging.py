@@ -7,14 +7,14 @@ from airflow.models import BaseOperator
 from airflow.utils.decorators import apply_defaults
 
 class DownloadS3FileToStagingOperator(BaseOperator):
-    """ 
+    """
     If a new version of the specified file exists in the S3 bucket then
     download it to the local staging area.  Otherwise do nothing.
 
     To perform the check of most-recent-version on S3, AWS_KEY, AWS_SECRET and
     AWS_REGION need to be defined in the local environment. Otherwise, it is
     assumed that the most recent file is already on local staging, i.e. no
-    download is triggered to avoid unnecessary transfer costs  
+    download is triggered to avoid unnecessary transfer costs
     """
 
     ui_color = '"#33FFFF'
@@ -39,19 +39,19 @@ class DownloadS3FileToStagingOperator(BaseOperator):
         self.s3_key=s3_key
         self.local_path=local_path
         self.replace_existing=replace_existing
-        print(f"""DownloadS3FileToStagingOperator:
-        {self.aws_credentials}
-        {self.s3_bucket}
-        {self.s3_prefix}
-        {self.s3_key}
-        {self.local_path}
-        {self.replace_existing}
-        """)
+        # print(f"""DownloadS3FileToStagingOperator:
+        # {self.aws_credentials}
+        # {self.s3_bucket}
+        # {self.s3_prefix}
+        # {self.s3_key}
+        # {self.local_path}
+        # {self.replace_existing}
+        # """)
 
 
     def last_modified_s3(self, context: dict) -> datetime:
         """ Use local environment variables to access noaa S3 bucket and
-            obtain the last-modified info for *s3_key* 
+            obtain the last-modified info for *s3_key*
 
             Returns: datetime.datetime of s3_key object's LastModified
                      property
@@ -109,8 +109,8 @@ class DownloadS3FileToStagingOperator(BaseOperator):
         self.log.info('Attempting to download'+
                       f's3://{self.s3_bucket}/{full_s3_filename}'+
                       f'to local staging: {full_local_filename}')
-        # Check if local file already exists and 
-        # wether it should be overwritten or 
+        # Check if local file already exists and
+        # wether it should be overwritten or
         # moved to another file with timestamp-suffix added
         if os.path.isfile(full_local_filename):
             if self.replace_existing:

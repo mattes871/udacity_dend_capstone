@@ -10,6 +10,7 @@ class DataQualityChecks:
     CSV_QUOTE_CHAR = general_config['csv_quote_char']
     CSV_DELIMITER = general_config['csv_delimiter']
     NOAA_STAGING_SCHEMA = general_config['noaa_staging_schema']
+    OPENAQ_STAGING_SCHEMA = general_config['openaq_staging_schema']
     PRODUCTION_SCHEMA = general_config['production_schema']
 
     dq_checks_noaa_dim=[

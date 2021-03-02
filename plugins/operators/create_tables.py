@@ -5,9 +5,10 @@ from airflow.utils.decorators import apply_defaults
 import os
 
 class CreateTablesOperator(BaseOperator):
-    """ Create Tables on Postgresql for
-        loading the data from S3 into
-        a staging area
+    """
+    Create Tables on Postgresql for
+    loading the data from S3 into
+    a staging area
     """
 
     ui_color = '#99FFFF'
@@ -18,20 +19,20 @@ class CreateTablesOperator(BaseOperator):
 
     @apply_defaults
     def __init__(self,
-                 postgres_conn_id='',
-                 sql_query_file='',
+                 postgres_conn_id: str ='',
+                 sql_query_file: str ='',
                  *args, **kwargs):
 
         super(CreateTablesOperator, self).__init__(*args, **kwargs)
         self.postgres_conn_id = postgres_conn_id
         self.sql_query_file = sql_query_file
 
-    def execute(self, context):
+    def execute(self, context: dict) -> None:
         """
-          Read sql_query_file and execute the SQL code in Postgresql
-          The content of the sql file is enclosed in a 'BEGIN/END',
-          so that the file can contain multiple statements that will
-          be executed sequentially.
+        Read sql_query_file and execute the SQL code in Postgresql
+        The content of the sql file is enclosed in a 'BEGIN/END',
+        so that the file can contain multiple statements that will
+        be executed sequentially.
         """
         self.log.info(f'Executing CreateTablesOperator with file:\n{self.sql_query_file}')
         with open(self.sql_query_file, mode='r') as f:
@@ -42,4 +43,3 @@ class CreateTablesOperator(BaseOperator):
         self.log.info(f'Executing CreateTablesOperator with:\n{sql_query}')
         postgres.run(sql_query)
         self.log.info(f'Succeeded with CreateTablesOperator from file:\n{self.sql_query_file}')
-
