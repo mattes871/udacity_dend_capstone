@@ -164,7 +164,7 @@ class SqlQueries:
             country as state, -- openaq country-field is varchar(2)
             left(location,30) as name
         FROM {OPENAQ_STAGING_SCHEMA}.f_air_data_raw
-        WHERE left(raw.date_utc,10) >= '{OPENAQ_DATA_AVAILABLE_FROM}'
+        WHERE left(date_utc,10) >= '{OPENAQ_DATA_AVAILABLE_FROM}'
         GROUP BY station_id, source, latitude, longitude, elevation, state, name
         ON CONFLICT (station_id, source) DO NOTHING
         ;

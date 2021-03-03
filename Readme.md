@@ -42,7 +42,11 @@ Access to both datasets is also possible via AWS CLI:
 > aws s3 ls <bucket-name> --no-sign-request
 
 
-The definition for the staging tables as well as the production tables can be found in [create_noaa_tables.sql](./dags/sql/create_noaa_tables.sql),  [create_openaq_tables.sql](./dags/sql/create_openaq_tables.sql) and [create_common_tables.sql](./dags/sql/create_common_tables.sql)
+The definition for the staging tables tables can be found in [create_noaa_tables.sql](./dags/sql/create_noaa_tables.sql),  [create_openaq_tables.sql](./dags/sql/create_openaq_tables.sql).
+
+A *data-dictionary* for the production tables can be found in
+[create_common_tables.sql](./dags/sql/create_common_tables.sql) (i.e. the concrete table definitions with comments for each fields.)
+
 
 
 
