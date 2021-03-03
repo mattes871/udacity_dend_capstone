@@ -7,6 +7,8 @@ This project is about bringing together these data sources in a common and simpl
 
 As a first step towards such a database, I investigated Amazon's [Open Data Registry](https://registry.opendata.aws/) and found two interesting data sources, bringing together the measures from classical weather parameters with air pollution status. Many more can be found in the list, even though for now, they remain in the Outlook section.
 
+### Project Goal & Purpose of the Data Model
+
 The goal of this project is to provide a database containing a condensed set of most relevant KPIs from the two data sources for a basic time grid (i.e. daily data). So that amateur researchers can start working with the data - without being overwhelmed by sheer detail and complexity some of the data sources might offer.
 
 The two data sources I selected cover basic weather KPIs and the measurement of air pollution. The data is compiled and provided by
@@ -40,8 +42,7 @@ Access to both datasets is also possible via AWS CLI:
 > aws s3 ls <bucket-name> --no-sign-request
 
 
-The definition for the staging tables as well as the production tables is found
-in [create_noaa_tables.sql](./dags/sql/create_noaa_tables.sql) and [create_openaq_tables.sql](./dags/sql/create_openaq_tables.sql)
+The definition for the staging tables as well as the production tables can be found in [create_noaa_tables.sql](./dags/sql/create_noaa_tables.sql),  [create_openaq_tables.sql](./dags/sql/create_openaq_tables.sql) and [create_common_tables.sql](./dags/sql/create_common_tables.sql)
 
 
 
@@ -113,7 +114,7 @@ while already having the "support" of the database functionality. All data read 
 The final stage is the production schema that contains the transformed, quality-checked and properly typed data that is ready for use in reporting, analytics or aggregation for end-user applications.
 
 
-# Installing and Running the Project
+# Installing and Executing the Project-demo
 
 ## Prerequisites
 
@@ -241,7 +242,7 @@ With the data available in the production schema after the NOAA- and OpenAQ-DAG 
 The pipeline is built to run daily batches. The scheduler is set to run daily shortly before midnight by default but the DAG can handle other intervals, too. Of course, intra-daily would not make sense as the NOAA server provides data only on a daily schedule.
 OpenAQ offers a "realtime" interface with much more frequent updates (at least hourly). But in the current implementation, I decided to provide only daily data for the sake of simplicity.
 
-A remark on *execution_date* and downloads for OpenAQ: To ensure that only complete daily data is downloaded, the operators use the *{{ yesterday_ds }}* macro. Using the actual execution date typically leads to incomplete downloads as the data still keeps coming in. 
+A remark on *execution_date* and downloads for OpenAQ: To ensure that only complete daily data is downloaded, the operators use the *{{ yesterday_ds }}* macro. Using the actual execution date typically leads to incomplete downloads as the data still keeps coming in.
 
 
 ### Catchup and Backfills
