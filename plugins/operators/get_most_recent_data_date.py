@@ -11,7 +11,8 @@ class GetMostRecentDataDateOperator(BaseOperator):
     """
     Get the date of the most recent fact in the specified
     {schema}.{table} using timestamp or date-type field {date_}
-    from postgres and set a variable with the result in airflow
+    and set a variable named {airflow_var_name} with the result in
+    airflow Variables section
     """
 
     ui_color = '#999966'
@@ -27,6 +28,7 @@ class GetMostRecentDataDateOperator(BaseOperator):
                  table: str,
                  date_field: str,
                  where_clause: str,
+                 min_date: str,
                  airflow_var_name: str,
                  *args, **kwargs):
 
@@ -36,6 +38,7 @@ class GetMostRecentDataDateOperator(BaseOperator):
         self.table = table
         self.where_clause = where_clause
         self.date_field = date_field
+        self.min_date = min_date
         self.airflow_var_name = airflow_var_name
 
     def execute(self, context: dict) -> None:
@@ -50,17 +53,19 @@ class GetMostRecentDataDateOperator(BaseOperator):
         postgres = PostgresHook(self.postgres_conn_id)
         connection = postgres.get_conn()
         cursor = connection.cursor()
-        cursor.execute(sql_cmds.format(self.date_field, self.schema,
-                                       self.table, self.where_clause))
+        cursor.execute(GetMostRecentDataDateOperator.sql_cmds \
+                            .format(self.date_field, self.schema,
+                                    self.table, self.where_clause))
         most_recent = cursor.fetchone()
         try:
             most_recent_date = datetime.strptime(most_recent[0],'%Y%m%d')
         except:
-            most_recent_date = NOAA_DATA_AVAILABLE_FROM
+            # Fallback if table is still empty
+            most_recent_date = self.min_date
         else:
             # Add one day to avoid complications with
             # Dec 31st dates
             most_recent_date += timedelta(days=1)
-        self.log.info(f"Most recent data in '{self.schema}.{self.table}' is as of: {most_recent_day}")
+        self.log.info(f"Most recent data in '{self.schema}.{self.table}' is as of: {most_recent_date}")
         Variable.delete(f'{self.airflow_var_name}')
         Variable.set(f'{self.airflow_var_name}', most_recent_date) #.strftime('%Y%m%d'))

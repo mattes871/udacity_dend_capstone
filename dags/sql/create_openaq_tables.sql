@@ -37,12 +37,13 @@ CREATE TABLE IF NOT EXISTS openaq_staging.f_air_data_raw (
     date_utc varchar,
     date_local varchar,
     parameter varchar, --measurand_parameter
-    location varchar, -- site_name???
     value varchar,
     unit varchar, -- measurand_unit
+    location varchar, -- site_name???
+    city varchar,
+    country varchar,
     latitude varchar,
     longitude varchar,
-    country varchar,
     source_name varchar, --node_source_name
     source_type varchar,
     mobile varchar, -- node_ismobile

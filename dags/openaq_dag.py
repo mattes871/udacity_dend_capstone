@@ -56,55 +56,39 @@ OPENAQ_STAGING_SCHEMA = general_config['openaq_staging_schema']
 PRODUCTION_SCHEMA = general_config['production_schema']
 
 dags_config: dict = Variable.get("dags", deserialize_json=True)
-OPENAQ_DAG_NAME   = dags_config['openaq_dag_name']
+NOAA_DAG_NAME   = dags_config['noaa_dag_name']
+OPENAQ_DAG_NAME =  dags_config['openaq_dag_name']
 PROCESS_DAG_NAME =  dags_config['process_dag_name']
+
+## 'postgres' is the name of the Airflow Connection to the Postgresql
+POSTGRES_STAGING_CONN_ID = 'postgres'
+POSTGRES_CREATE_NOAA_TABLES_FILE = 'dags/sql/create_noaa_tables.sql'
+POSTGRES_CREATE_OPENAQ_TABLES_FILE = 'dags/sql/create_openaq_tables.sql'
+POSTGRES_CREATE_COMMON_TABLES_FILE = 'dags/sql/create_common_tables.sql'
 
 OPENAQ_STAGING_DIM_RAW = os.path.join(OPENAQ_STAGING_LOCATION,'dimensions_raw')
 OPENAQ_STAGING_DIM_CSV = os.path.join(OPENAQ_STAGING_LOCATION,'dimensions_csv')
 OPENAQ_STAGING_FACTS = os.path.join(OPENAQ_STAGING_LOCATION,'facts')
 
 ## Start date is yesterday, so that the scheduler starts the task when activated
-DEFAULT_START_DATE = datetime.today() - timedelta(days=1)
+# DEFAULT_START_DATE = datetime.today() - timedelta(days=1)
 
-## 'postgres' is the name of the Airflow Connection to the Postgresql
-POSTGRES_STAGING_CONN_ID = 'postgres'
-POSTGRES_CREATE_NOAA_TABLES_FILE = 'dags/sql/create_noaa_tables.sql'
-POSTGRES_CREATE_OPENAQ_TABLES_FILE = 'dags/sql/create_openaq_tables.sql'
+## Start with the earliest available data
+DEFAULT_START_DATE = datetime.strptime(OPENAQ_DATA_AVAILABLE_FROM,'%Y-%m-%d')
+
 
 DEFAULT_ARGS = {
     'owner': 'matkir',
-    'depends_on_past': False,
+    # ensure that DAG is run chronologically, and terminates before next
+    # DAG for following execution_date is run
+    'depends_on_past': True,
     'retries': 3,
-    'catchup': False,
+    'catchup': True,
     'retry_delay': timedelta(minutes=5),
     'email_on_retry': False,
     'start_date': DEFAULT_START_DATE,
     'region': AWS_REGION
 }
-
-# def get_date_of_most_recent_openaq_facts() -> None:
-#     """
-#     Get the date of the most recent fact in the openaq_staging.air_data_raw data
-#     from postgres and set *most_recent_openaq_data* variable in airflow
-#     """
-#
-#     # Get date of most recent data from production table
-#     postgres = PostgresHook(POSTGRES_STAGING_CONN_ID)
-#     connection = postgres.get_conn()
-#     cursor = connection.cursor()
-#     cursor.execute(SqlQueries.most_recent_openaq_data)
-#     most_recent = cursor.fetchone()
-#     try:
-#         most_recent_day = datetime.strptime(most_recent[0],'%Y%m%d')
-#     except:
-#         most_recent_day = OPENAQ_DATA_AVAILABLE_FROM
-#     else:
-#         # Add one day to avoid complications with
-#         # Dec 31st dates
-#         most_recent_day += timedelta(days=1)
-#     print(f'Most recent OPENAQ data is as of: {most_recent_day}')
-#     Variable.delete('most_recent_openaq_data')
-#     Variable.set('most_recent_openaq_data', most_recent_day) #.strftime('%Y%m%d'))
 
 def create_partition_tables() -> None:
     """
@@ -119,7 +103,7 @@ def create_partition_tables() -> None:
     for year in range(start_year, end_year+1):
         f_sql = SqlQueries.create_partition_table_cmd(
                     schema=f'{PRODUCTION_SCHEMA}',
-                    table='f_airpoll_data',
+                    table='f_climate_data',
                     year=year
                     )
         cursor.execute(f_sql)
@@ -142,6 +126,13 @@ with DAG(OPENAQ_DAG_NAME,
     #   Create tables in openaq_staging and production schema
     # -----------------------------------------------------
     with TaskGroup("Create_postgres_tables") as create_tables:
+        # Create Common fact tables in Production Database (Postgresql)
+        create_common_tables_operator = CreateTablesOperator(
+            task_id = 'Create_common_tables',
+            postgres_conn_id = POSTGRES_STAGING_CONN_ID,
+            sql_query_file = os.path.join(AIRFLOW_HOME,
+                                          POSTGRES_CREATE_COMMON_TABLES_FILE),
+            )
         # Create OPENAQ dimension tables in Staging Database (Postgresql)
         create_openaq_tables_operator = CreateTablesOperator(
             task_id = 'Create_openaq_tables',
@@ -161,6 +152,7 @@ with DAG(OPENAQ_DAG_NAME,
             task_id = 'Create_partition_tables',
             python_callable = create_partition_tables
             )
+        create_common_tables_operator >> create_openaq_tables_operator
         create_openaq_tables_operator >> populate_kpi_names_table_operator
         create_openaq_tables_operator >> create_partition_tables_operator
 
@@ -168,29 +160,26 @@ with DAG(OPENAQ_DAG_NAME,
     # Run import of Dimension and Fact data in parallel
     # -----------------------------------------------------
     with TaskGroup("Run_file_import") as run_file_import:
-        # Load relevant dimension and documentation files from the
+        # Download json-files with daily / intra-daily data from
         # OpenAQ S3 bucket into the local Staging Area (Filesystem)
         with TaskGroup("download_openaq_files") as download_openaq_files:
             download_openaq_files_operator = DownloadOpenAQFilesOperator(
-                # [:-4]: remove last four characters, i.e. file suffix '.txt'
                 task_id = f'Download_openaq_files',
                 aws_credentials = OPENAQ_AWS_CREDS,
                 s3_bucket = OPENAQ_S3_BUCKET,
-                s3_prefix = f"{OPENAQ_S3_FACT_PREFIX}/"+"{{ ds }}",
+                s3_prefix = f"{OPENAQ_S3_FACT_PREFIX}/"+"{{ yesterday_ds }}",
                 local_path = os.path.join(OPENAQ_STAGING_FACTS,
-                                          "{{ ds }}")
+                                          "{{ yesterday_ds }}")
                 )
-            ##
-            ## Download the CMU station data here!
-            ##
 
+        # Convert .ndjson.gz-Files to CSV / OpenAQ-specific processing
         with TaskGroup("reformat_openaq_files") as reformat_openaq_files:
             reformat_openaq_files_operator = ReformatOpenAQJSONFilesOperator(
                 task_id = 'Reformat_openaq_files',
                 local_path_raw = os.path.join(OPENAQ_STAGING_FACTS,
-                                          "{{ ds }}"),
+                                          "{{ yesterday_ds }}"),
                 local_path_csv = os.path.join(OPENAQ_STAGING_FACTS,
-                                          "{{ ds }}"),
+                                          "{{ yesterday_ds }}"),
                 delimiter = f'{CSV_DELIMITER}',
                 quote = f'{CSV_QUOTE_CHAR}',
                 add_header = True,
@@ -198,6 +187,7 @@ with DAG(OPENAQ_DAG_NAME,
                 gzipped = True
             )
 
+        # Load data from CSV files into Postgresql
         with TaskGroup("import_openaq_files") as import_openaq_files:
             import_openaq_files_into_postgres_operator = LocalCSVToPostgresOperator(
                 task_id = f'Import_openaq_files_into_postgres',
@@ -207,7 +197,7 @@ with DAG(OPENAQ_DAG_NAME,
                 quote = f'{CSV_QUOTE_CHAR}',
                 truncate_table = False, #True,
                 local_path = os.path.join(OPENAQ_STAGING_FACTS,
-                                          "{{ ds }}"),
+                                          "{{ yesterday_ds }}"),
                 file_pattern = f'*.csv',
                 gzipped = False
                 )
@@ -215,120 +205,44 @@ with DAG(OPENAQ_DAG_NAME,
         download_openaq_files >> reformat_openaq_files
         reformat_openaq_files >>  import_openaq_files
 
-        # # Run quality checks on dimension data
-        # check_openaq_quality_operator = DataQualityOperator(
-        #     task_id='Check_openaq_quality',
-        #     postgres_conn_id = POSTGRES_STAGING_CONN_ID,
-        #     dq_checks = DataQualityChecks.dq_checks_openaq,
-        #     )
-        #
-        # with TaskGroup("Load_openaq_into_production") as load_openaq_into_production:
-        #     # Transfer raw tables to production tables
-        #     load_openaq_facts_operator = PostgresOperator(
-        #         task_id="load_openaq_facts",
-        #         postgres_conn_id=POSTGRES_STAGING_CONN_ID,
-        #         sql=SqlQueries.load_openaq_facts
-        #     )
-        # import_openaq_files >> check_openaq_quality_operator
-        # check_openaq_quality_operator >> load_openaq_into_production
+        # Run quality checks on dimension data
+        check_openaq_quality_operator = DataQualityOperator(
+            task_id='Check_openaq_quality',
+            postgres_conn_id = POSTGRES_STAGING_CONN_ID,
+            dq_checks = DataQualityChecks.dq_checks_openaq,
+            )
 
+        with TaskGroup("Load_openaq_into_production") as load_openaq_into_production:
+            # Transfer raw tables to production tables
+            load_openaq_stations_operator = PostgresOperator(
+                task_id="load_openaq_stations",
+                postgres_conn_id=POSTGRES_STAGING_CONN_ID,
+                sql=SqlQueries.load_openaq_stations
+            )
+            # Transfer raw tables to production tables
+            load_openaq_facts_operator = PostgresOperator(
+                task_id="load_openaq_facts",
+                postgres_conn_id=POSTGRES_STAGING_CONN_ID,
+                sql=SqlQueries.transform_openaq_avg_facts
+            )
+            ## Tasks for later implementation:
+            #  - Update d_country and d_inventory tables
+            #  - Insert further aggregate-KPIs, e.g. min/max values
 
-        #
-        # with TaskGroup("Load_dims_into_production") as load_dims_into_production:
-        #     # Transfer raw tables to production tables
-        #     load_openaq_countries_operator = PostgresOperator(
-        #         task_id="load_openaq_countries",
-        #         postgres_conn_id=POSTGRES_STAGING_CONN_ID,
-        #         sql=SqlQueries.load_openaq_countries
-        #     )
-        #
-        #     # Transfer raw tables to production tables
-        #     load_openaq_stations_operator = PostgresOperator(
-        #         task_id="load_openaq_stations",
-        #         postgres_conn_id=POSTGRES_STAGING_CONN_ID,
-        #         sql=SqlQueries.load_openaq_stations
-        #     )
-        #
-        #     # Transfer raw tables to production tables
-        #     load_openaq_inventory_operator = PostgresOperator(
-        #         task_id="load_openaq_inventory",
-        #         postgres_conn_id=POSTGRES_STAGING_CONN_ID,
-        #         sql=SqlQueries.load_openaq_inventory
-        #     )
-        # ............................................
-        # Defining TaskGroup DAG
-        # ............................................
-        # download_openaq_dims >> reformat_openaq_dims
-        # reformat_openaq_dims >> import_openaq_dims
-        # import_openaq_dims >> check_dim_quality_operator
-        # check_dim_quality_operator >> load_dims_into_production
-        #[download_openaq_dims] >> dummy1_operator >> [reformat_openaq_dims]
-        #[reformat_openaq_dims] >> dummy2_operator >> [import_openaq_dims]
-        #[import_openaq_dims] >> check_dim_quality_operator
-        #check_dim_quality_operator >> [load_dims_into_production]
+            load_openaq_stations_operator >> load_openaq_facts_operator
 
-    # -----------------------------------------------------
-    # Run import of Dimension and Fact data in parallel
-    # -----------------------------------------------------
-    # with TaskGroup("Run_fact_import") as run_facts_import:
-    #
-    #     # Get date of most recent OPENAQ data in the Postgres production tables
-    #     get_date_of_most_recent_openaq_facts_operator = PythonOperator(
-    #         task_id = 'Get_date_of_most_recent_openaq_facts',
-    #         python_callable = get_date_of_most_recent_openaq_facts
-    #         )
-    #
-    #     # Select all facts for date == {{ DS }} from the OPENAQ S3 bucket
-    #     # and store them as a csv file in the local Staging Area (Filesystem)
-    #     select_openaq_data_from_s3_operator = SelectFromOPENAQS3ToStagingOperator(
-    #         task_id = 'Select_openaq_data_from_s3',
-    #         aws_credentials = OPENAQ_AWS_CREDS,
-    #         s3_bucket = OPENAQ_S3_BUCKET,
-    #         s3_prefix = OPENAQ_S3_FACT_PREFIX,
-    #         s3_table_file = '{{ execution_date.year }}.csv.gz',
-    #         most_recent_data_date = '{{ var.value.most_recent_openaq_data }}',
-    #         execution_date = '{{ ds }}',
-    #         real_date = date.today().strftime('%Y-%m-%d'),
-    #         local_path = OPENAQ_STAGING_FACTS,
-    #         fact_delimiter = OPENAQ_S3_FACT_DELIM,
-    #         quotation_char = CSV_QUOTE_CHAR
-    #         )
-    #
-    #     # Load the OPENAQ fact data for {{ DS }} from csv file on local Staging
-    #     # into the tables prepared on Staging Database (Postgresql)
-    #     load_openaq_fact_tables_into_postgres_operator = LocalStageToPostgresOperator(
-    #         task_id = 'Load_openaq_fact_tables_into_postgres',
-    #         postgres_conn_id = POSTGRES_STAGING_CONN_ID,
-    #         table = f'{OPENAQ_STAGING_SCHEMA}.f_weather_data_raw',
-    #         delimiter = OPENAQ_S3_FACT_DELIM,
-    #         truncate_table = True,
-    #         local_path = OPENAQ_STAGING_FACTS,
-    #         file_pattern = "*.csv.gz",
-    #         gzipped = True
-    #         )
-    #
-    #     # Run quality checks on raw fact data
-    #     check_fact_quality_operator = DataQualityOperator(
-    #         task_id='Check_fact_quality',
-    #         postgres_conn_id = POSTGRES_STAGING_CONN_ID,
-    #         dq_checks = DataQualityChecks.dq_checks_facts,
-    #         )
-    #
-    #     # Finally, insert quality-checked data from Postgres Staging
-    #     # into the "production" database
-    #     transform_openaq_facts_operator = PostgresOperator(
-    #         task_id="transform_openaq_facts",
-    #         postgres_conn_id=POSTGRES_STAGING_CONN_ID,
-    #         sql=SqlQueries.transform_openaq_facts
-    #     )
-    #     # ............................................
-    #     # Defining TaskGroup DAG
-    #     # ............................................
-    #     get_date_of_most_recent_openaq_facts_operator >> select_openaq_data_from_s3_operator
-    #     select_openaq_data_from_s3_operator >> load_openaq_fact_tables_into_postgres_operator
-    #     load_openaq_fact_tables_into_postgres_operator >> check_fact_quality_operator
-    #     check_fact_quality_operator >> transform_openaq_facts_operator
+        import_openaq_files >> check_openaq_quality_operator
+        check_openaq_quality_operator >> load_openaq_into_production
 
+    # After successful transfer of data from staging to production,
+    # purge all data from staging tables
+    with TaskGroup("Delete_openaq_staging_data") as delete_openaq_staging_data:
+        # Transfer raw tables to production tables
+        delete_openaq_staging_data_operator = PostgresOperator(
+            task_id="delete_openaq_staging_data",
+            postgres_conn_id=POSTGRES_STAGING_CONN_ID,
+            sql=SqlQueries.delete_openaq_staging_data
+        )
 
     end_operator = DummyOperator(task_id='Stop_execution', dag=dag)
 
@@ -339,4 +253,5 @@ with DAG(OPENAQ_DAG_NAME,
 
 start_operator >> create_tables
 create_tables >> run_file_import
-run_file_import >> end_operator
+run_file_import >> delete_openaq_staging_data
+delete_openaq_staging_data >> end_operator

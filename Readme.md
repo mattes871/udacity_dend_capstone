@@ -26,15 +26,15 @@ file gets daily updates appended
 See https://docs.opendata.aws/noaa-ghcn-pds/readme.html for more details.
 
 ### OpenAQ dataset
-**Scope**: 8,000 stations in 90 countries with daily and intradaily data back to 2013; > 1.5 Mio measurements per day
-**Measures**: 7 different KPIs  
-5 core KPIs (Min/Max temperature, precipitation, snowfall, snow depth), 50+ further KPIs
+**Scope**: 8,000 stations in 90 countries with hourly to daily data back to 2013; > 1.5 Mio measurements per day
+**Measures**: 12 different KPIs and measurement units
+Amount of Ozone, Particle matter (10, 2.5), Carbon Monoxide, Sulphur Dioxide, Nitrogen Dioxide
 **Source platform**: AWS S3 bucket
-**File structure**: Separate directory for every day since Nov 2013. Set of .ndjson-Files per day.
+**File structure**: Separate daily directories back until Nov 2013, each populated with sets of .ndjson-Files .
 **Format**: ndjson, ndjson.gz
 **Downloads**: https://openaq-fetches.s3.amazonaws.com/index.html
 
-See https://openaq-fetches.s3.amazonaws.com/index.html for more details.
+See https://openaq-fetches.s3.amazonaws.com/index.html and https://github.com/openaq/openaq-data-format for more details.
 
 Access to both datasets is also possible via AWS CLI:
 > aws s3 ls <bucket-name> --no-sign-request
@@ -72,25 +72,23 @@ Not in scope:
 After a first look at the data sources, it is clear that the amount of data already qualifies as Big Data. At least when taking into account all the available history.
 At the same time, my current time budget is very tight and my employer - who is paying for this course - expects me to finish the degree as soon as possible. Hence, I am trying to balance my project aspirations with the choice of an infrastructure that allows fast development and provides an almost instantaneous response when triggering experiments. Another consideration are costs. Having exceeded my Udacity-provided AWS allowance already in November, a nice Redshift server and ECM cluster are not in the budget any longer.  
 
-Taking these non-technical constraints into account, a local solution based on Docker Containers, Apache Airflow and a Postgresql server seems to offer both: Rapid development and enough headroom to deal with the amount of data and computation at hand. Once the project prototype is running, the platform-agnostic containerization also promises an easy migration path to more powerful machines in the clouds to cope with additional data sources and an increased number of users.
+Taking these non-technical constraints into account, a local solution based on Docker Containers, Apache Airflow and a Postgresql server seems to offer both: Rapid development and enough headroom to deal with the amount of data and computation at hand. Once the project prototype is running, the platform-agnostic containerisation also promises an easy migration path to more powerful machines in one of the clouds to cope with additional data sources and an increased number of users.
 
 ### Airflow 2.0
 Airflow is one of the standard frameworks for orchestrating workflows in data
 engineering. As Airflow is now also supporting Kubernetes, it seems to be a safe choice in terms of computational scalability. In my local implementation, however, Airflow has to make do with a LinearExecutor and maximum 10 Cores. I chose Airflow version 2.0 because of the much more reliable grouping of sub tasks using *TaskGroup*s in contrast to the older SubDAG feature.   
 
 ### Postgresql 12
-Postgresql is my standard choice whenever there is no apparent reason to go for a more specialized non-SQL database. In this use-case, the goal is to provide a multi-purpose database, a flexible basis for reporting, analysis and extraction of data. Thus, a relational database seems a good choice. With further improved performance and scalability in versions 12 and above, Postgresql works well even on very large datasets - given that indexes and partitions are designed well.
-In case of even larger data volumes, Hive could be an alternative.
+Postgresql is my standard choice whenever there is no apparent reason to go for a more specialized non-SQL database. In this use-case, the goal is to provide a multi-purpose database, a flexible basis for reporting, analysis and extraction of data. Thus, a relational database seems a good choice. With further improved performance and scalability in versions 12 and above, Postgresql works well even on very large datasets - given that indexes and partitions are designed well. In case of even larger data volumes, Hive could be an alternative.
 
 ### Docker & Docker Compose
-Using Docker and 'docker-compose' is a very elegant and convenient way to set up
+Using Docker and 'docker-compose' is an elegant and convenient way of setting up
 development environments with minimum effort but maximum reusability of existing
 components and maximum portability to other hosts in mind.
-While the main goal of containers in this project was to quickly set up an isolated,
-well-defined and portable development environment. Such an environment also lends itself easier to a migration onto more powerful platforms.
+While the main goal of containers in this project was to quickly set up an isolated, well-defined and portable development environment. Such an environment also lends itself easier to a migration onto more powerful platforms.
 
 It needs to be said, however, that the current configuration was set up with
-ease of installation and debugging in mind. It is not optimized for performance
+ease of installation and debugging in mind. It is not optimised for performance
 or intended for production use.
 
 
@@ -109,7 +107,7 @@ completely and data be imported directly into a database like AWS Redshift, assu
 ### A staging schema in the Postgresql Database
 A staging schema in which to ingest the raw data from the filesystem. The
 rationale is to do quality checks, cleansing and transformations on the raw data
-while already having the "support" of the database functionality. All data read from the filesystem is ingested in its raw format, i.e. as raw text (binary fields need extra handling - but there is no binary content in the two selected data sources).
+while already having the "support" of the database functionality. All data read from the filesystem is ingested in its raw format, i.e. as raw text (binary fields need extra handling - however, this is out of scope in this project as there is no binary content in the two selected data sources).
 
 ### A production schema in Postgresql
 The final stage is the production schema that contains the transformed, quality-checked and properly typed data that is ready for use in reporting, analytics or aggregation for end-user applications.
@@ -202,35 +200,55 @@ All *.csv* files should now be in the same format and ready for direct import in
 
 #### Ingesting data from local Filesystem into Postgres
 The *.csv* files from the local filesystem are loaded into Postgres using the *COPY_FROM* import functionality (*LocalCSVToPostgresOperator*).
+Currently, there is a separate staging schema for each data source (*openaq_schema* and *noaa_schema* respectively) but the table names are static. Thus, all tasks are loading data into the same tables. A future extension of this could be to add the *execution_date* as a suffix to each table or the schema name, thus eliminating any chance of conflict between concurrent DAG runs or data that remained from an unsuccessful run of an operator. In the current version, we do not permit concurrent execution of tasks from different execution dates to avoid conflicts. The clean-up strategy for the staging tables is to purge their data after successful transfer to production.
 
 #### Quality Checks on Staging Data
-Data quality checks should be performed on the data in the Postgres staging area. While there are many tools for data manipulation also on the filesystem level, it seems much more appropriate for large data volumes to do this step based on Postgres or other database platforms.
-The *DataQualityOperator* implemented here, offers some basic test capabilities via a list of SQL statements and expected - or unexpected - values. Currently, four checks are defined in *helpers.DataQualityChecks*.
+Data quality checks should be performed on the data in the Postgres staging area. While there are many tools for (fast) data manipulation also on the filesystem level, it seems much more appropriate for large data volumes to do this step based on Postgres or other database platforms.
+The *DataQualityOperator* implemented here, offers some basic test capabilities via a list of SQL statements and expected - or unexpected - values. Currently, five different checks are defined in *helpers.DataQualityChecks*.
 For a proper production system, more sophisticated tests would need to be implemented (e.g. checking the number of lines in the files downloaded and comparing that to the number of records ingested).
 
 #### Transferring Data from Staging to Production
-Most of the heavy lifting in terms of transformation, duplicate handling and adding information is happening here.  Utilizing the *PostgresOperator*, all of this is done on the database server. No extra passing of data into python is necessary. In case of bottlenecks, optimizing the Postgresql server definitely pays off.
-For NOAA facts, the transformation code resides in *helpers.SqlQueries.transform_noaa_facts*.
+Most of the heavy lifting in terms of transformation, duplicate handling and adding information is happening here.  Utilising the *PostgresOperator*, all of this is done on the database server. No extra passing of data into python is necessary. In case of bottlenecks, optimising the Postgresql server definitely pays off.
 
-Duplicate handling is done via Postgresql's "ON CONFLICT" clause. In case of a later migration to Amazon Redshift, this might cause some headache as Redshift does not support this.
+It needs to be mentioned that NOAA and OpenAQ data share the same fact and dimension tables in production. Transferring the data from staging to the production schema requires a harmonisation of both sources' data.
+
+##### Dimensional data for NOAA
+The content of the dimensional tables from staging is inserted into the production tables. Duplicates are avoided by using Postgresql's 'ON CONFLICT' mechanism. For weather stations and countries, duplicate keys trigger result in skipping the insert action ('DO NOTHING'). In case of the  inventory data, the existing record is updated with the most recent data from staging.
+
+##### Dimensional data for OpenAQ
+The information about the measurement points is extracted by aggregating this data from the OpenAQ fact table in staging. In analogy to NOAA, these records are then passed to production for insertion. Duplicates are skipped using Postgresql's 'ON CONFLICT' clause.
+
+##### Facts data from NOAA
+NOAA provides daily measurements. The main transformation is to convert the string values to their proper data types (according to the data model)
+The transformation code for NOAA resides in *helpers.SqlQueries.transform_noaa_facts*.
+
+##### Facts data from OpenAQ
+In contrast to NOAA, most of OpenAQ's measurements are on an hourly basis. For the sake of simplicity, the production data should be of daily granularity. In addition to the type conversions, the transformation for OpenAQ includes an aggregation step from hourly to daily.
+The exemplary transformation code for an arithmetic-mean aggregation is provided in *helpers.SqlQueries.transform_openaq_avg_facts*.
+Several other meaningful ways of aggregation can be thought of as future enhancements: Min and max values, median, moving average, etc.
+
+Remark on 'ON CONFLICT': Duplicate handling is done via Postgresql's "ON CONFLICT" clause. In case of a later migration to Amazon Redshift, this might cause some headache as Redshift does not support this.
+
+
+#### Cleaning up Staging Tables after successful transfer
+After all tasks that require the staging tables have been executed successfully, the tables in the staging schemata are truncated to make space for new data. Thanks to the implemented duplicate-handling, the current version could also manage if already imported data remained in the staging tables. Due t the amount of data, however, the impact on run time would lead to exorbitant running times.
+
 
 #### Finally: Building an example datamart
-With the data available now in the production schema, one can easily run aggregations over time, location and type of measurement. The repository contains a separate dag ('process_dims_and_facts_dag') to show how to use the production data
-to deliver aggregates for reporting or analysis purposes. In the example, a
-monthly aggregation for weather stations in Germany is computed that contains
-the average min & max temperatures as well as the monthly precipitation. The
-output is stored in the table 'production.ol_mthly_analytic_ger'.
-Again, the main work happens on the Postgresql server only. The corresponding SQL is defined in *helpers.SqlQueries.aggregate_ger_monthly_data* is executed via the *PostgresOperator*.
+With the data available in the production schema after the NOAA- and OpenAQ-DAG ran, one can easily conduct aggregations over time, location and type of measurement. The repository contains a separate dag ('process_example_dag') to show how to use the production data to deliver aggregates for reporting or analysis purposes. In the example, a monthly aggregation for weather stations in Germany is computed that contains the average min & max temperatures as well as the monthly precipitation. The output is stored in the table 'production.ol_mthly_analytic_ger'. Again, the main work happens on the Postgresql server. The corresponding SQL is defined in *helpers.SqlQueries.aggregate_ger_monthly_data* and is executed via the *PostgresOperator*.
 
 ### The Schedule
-The pipeline is built to run daily batches. The scheduler is set to run daily around midnight by default but the DAG can handle other intervals, too. Of course, intra-daily would not make sense as the NOAA server provides data only on a daily schedule.
-OpenAQ offers a "realtime" interface with much more frequent updates (at least hourly). But in the current implementation, I decided to first work with the daily aggregates only.
+The pipeline is built to run daily batches. The scheduler is set to run daily shortly before midnight by default but the DAG can handle other intervals, too. Of course, intra-daily would not make sense as the NOAA server provides data only on a daily schedule.
+OpenAQ offers a "realtime" interface with much more frequent updates (at least hourly). But in the current implementation, I decided to provide only daily data for the sake of simplicity.
+
+A remark on *execution_date* and downloads for OpenAQ: To ensure that only complete daily data is downloaded, the operators use the *{{ yesterday_ds }}* macro. Using the actual execution date typically leads to incomplete downloads as the data still keeps coming in. 
+
 
 ### Catchup and Backfills
+
+#### NOAA
 The operators for NOAA fact and dimension data handle catchup and backfill
-by themselves. Hence airflow's catchup parameter is set to *False*. The operators
-also manage if the NOAA data did not receive an update before the scheduled run.  The next run will always try to load all not yet downloaded data from
-NOAA.
+by themselves. Hence airflow's catchup parameter is set to *False*. The operators also manage if the NOAA data did not receive an update before the scheduled run.  The next run will always try to load all not yet downloaded data from NOAA.
 
 Every year of NOAA data holds approximately 100-200MB in gzipped format,
 depending on the number of KPIs measured and provided by the weather stations.
@@ -242,10 +260,31 @@ Please note that when catching up on several decades of history, the data
 processing time can be massive (hours to days depending on the platform Postgres
 is running on).
 
+#### OpenAQ
+The OpenAQ data lends itself easily to a daily download scheme as all input from the measurement stations is stored in a separate folder per day on S3. Hence, I am using Airflow's ability to backfill historic data by setting the *start_date* to the first date, from which we want to ingest measurements into the database.
+
+
 ## Outlook & Future Scenarios
 Moving ahead from this prototype, the project could get more interesting if further data sources could be added. Be it additional weather stations, e.g. from ECA&D, measurements from new areas (there is an S3 data set with Ocean surface temperatures measured from Satellites) or even image data for combination with the weather station coordinates.
-Further data sources would first of all require additional storage space and more compute power for the database server. Ideally, the whole setup could move closer to the data, e.g. onto AWS servers in region US-EAST-1 (assuming that all data is part of the AWS Open Data Programme), thus reducing download times significantly.
-Planning for a 100x increase of the data volume - in terms of records - would also require to go for a distributed database setup, like the one Amazon is offering with Redshift. Similarly, when increasing the number of users significantly, replicating the data onto several database servers would help.
+
+### Shortcomings of the Prototype and required steps towards a Production System
+The current Postgresql Container is multi-user capable but currently set up with a single standard user (*airflow*) whose access credentials are accessible within the project repository.
+
+Measure: Harden Postgresql Database / Container
+
+A future scenario where dozens or hundreds of users have accounts on the database machine and might use them concurrently, would require a massive scale up of the number of database connections possible and thus an upgrade of the underlying database infrastructure.
+
+Measure: Moving to a distributed database setup and introduction of replication to avoid deadlocks.
+
+Although the containers can be easily used on any Virtual Machine, the current setup is not optimised around scalability of the underlying infrastructure but relies on a simply big-enough machine to execute the containers. In case of a 100x increase in data volume (in terms of records), the current single-container setup would no longer work.
+
+Measure: Move to a more dynamically scalable infrastructure (Cloud + Kubernetes) in addition to changing the database setup to a distributed system with higher replication.
+
+The prototype tries to keep download volumes as low as possible. Still downloading can take a significant amount of time especially when catching up on missed time intervals.
+
+Measure: Move the infrastructure closer to the data, e.g. onto AWS servers in region US-EAST-1 (assuming that all data is part of the AWS Open Data Programme), thus reducing download times significantly.
+
+
 
 
 # References
@@ -285,6 +324,6 @@ out-of-the-box (especially not the ones for Udacity degrees).
 ## docker-compose.yaml
 Based on docker-compose.yaml proposed in [Apache/Airflow and PostgreSQL with Docker and Docker Compose](https://towardsdatascience.com/apache-airflow-and-postgresql-with-docker-and-docker-compose-5651766dfa96)
 
-## Using Task Sensors
+## Using Task Sensors (but eventually removed from actual use in the project)
 Code snippet applied to wait for external tasks.
 [Dependencies between DAGs: How to wait until another DAG finishes in Airflow?](https://www.mikulskibartosz.name/using-sensors-in-airflow/)

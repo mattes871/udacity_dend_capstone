@@ -12,7 +12,7 @@
             "s3_fact_compression": "gzip",
             "s3_fact_delimiter": ""
         },
-        "data_available_from": "2020-01-01",
+        "data_available_from": "2020-11-01",
         "staging_location": "./staging_files/openaq",
         "version": "v2021-02-26"
     }

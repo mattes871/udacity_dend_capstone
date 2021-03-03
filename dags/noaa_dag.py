@@ -58,19 +58,23 @@ PRODUCTION_SCHEMA = general_config['production_schema']
 
 dags_config: dict = Variable.get("dags", deserialize_json=True)
 NOAA_DAG_NAME   = dags_config['noaa_dag_name']
+OPENAQ_DAG_NAME =  dags_config['openaq_dag_name']
 PROCESS_DAG_NAME =  dags_config['process_dag_name']
+
+## 'postgres' is the name of the Airflow Connection to the Postgresql
+POSTGRES_STAGING_CONN_ID = 'postgres'
+POSTGRES_CREATE_NOAA_TABLES_FILE = 'dags/sql/create_noaa_tables.sql'
+POSTGRES_CREATE_OPENAQ_TABLES_FILE = 'dags/sql/create_openaq_tables.sql'
+POSTGRES_CREATE_COMMON_TABLES_FILE = 'dags/sql/create_common_tables.sql'
 
 NOAA_STAGING_DIM_RAW = os.path.join(NOAA_STAGING_LOCATION,'dimensions_raw')
 NOAA_STAGING_DIM_CSV = os.path.join(NOAA_STAGING_LOCATION,'dimensions_csv')
 NOAA_STAGING_FACTS = os.path.join(NOAA_STAGING_LOCATION,'facts')
 
 ## Start date is yesterday, so that the scheduler starts the task when activated
+# All catchup-action is done in the noaa operators;
+# no historical execution_dates necessary.
 DEFAULT_START_DATE = datetime.today() - timedelta(days=1)
-
-## 'postgres' is the name of the Airflow Connection to the Postgresql
-POSTGRES_STAGING_CONN_ID = 'postgres'
-POSTGRES_CREATE_NOAA_TABLES_FILE = 'dags/sql/create_noaa_tables.sql'
-POSTGRES_CREATE_OPENAQ_TABLES_FILE = 'dags/sql/create_openaq_tables.sql'
 
 DEFAULT_ARGS = {
     'owner': 'matkir',
@@ -82,30 +86,6 @@ DEFAULT_ARGS = {
     'start_date': DEFAULT_START_DATE,
     'region': AWS_REGION
 }
-
-# def get_date_of_most_recent_noaa_facts() -> None:
-#     """
-#     Get the date of the most recent fact in the noaa_staging_schema.weather_data_raw data
-#     from postgres and set *noaa_most_recent_data* variable in airflow
-#     """
-#
-#     # Get date of most recent data from production table
-#     postgres = PostgresHook(POSTGRES_STAGING_CONN_ID)
-#     connection = postgres.get_conn()
-#     cursor = connection.cursor()
-#     cursor.execute(SqlQueries.noaa_most_recent_data)
-#     most_recent = cursor.fetchone()
-#     try:
-#         most_recent_day = datetime.strptime(most_recent[0],'%Y%m%d')
-#     except:
-#         most_recent_day = NOAA_DATA_AVAILABLE_FROM
-#     else:
-#         # Add one day to avoid complications with
-#         # Dec 31st dates
-#         most_recent_day += timedelta(days=1)
-#     print(f'Most recent NOAA data is as of: {most_recent_day}')
-#     Variable.delete('noaa_most_recent_data')
-#     Variable.set('noaa_most_recent_data', most_recent_day) #.strftime('%Y%m%d'))
 
 def create_partition_tables() -> None:
     """
@@ -143,6 +123,13 @@ with DAG(NOAA_DAG_NAME,
     #   Create tables in noaa_staging and production schema
     # -----------------------------------------------------
     with TaskGroup("Create_postgres_tables") as create_tables:
+        # Create Common fact tables in Production Database (Postgresql)
+        create_common_tables_operator = CreateTablesOperator(
+            task_id = 'Create_common_tables',
+            postgres_conn_id = POSTGRES_STAGING_CONN_ID,
+            sql_query_file = os.path.join(AIRFLOW_HOME,
+                                          POSTGRES_CREATE_COMMON_TABLES_FILE),
+            )
         # Create NOAA dimension tables in Staging Database (Postgresql)
         create_noaa_tables_operator = CreateTablesOperator(
             task_id = 'Create_noaa_tables',
@@ -161,6 +148,7 @@ with DAG(NOAA_DAG_NAME,
             task_id = 'Create_partition_tables',
             python_callable = create_partition_tables
             )
+        create_common_tables_operator >> create_noaa_tables_operator
         create_noaa_tables_operator >> populate_kpi_names_table_operator
         create_noaa_tables_operator >> create_partition_tables_operator
 
@@ -328,10 +316,6 @@ with DAG(NOAA_DAG_NAME,
         reformat_noaa_dims >> import_noaa_dims
         import_noaa_dims >> check_dim_quality_operator
         check_dim_quality_operator >> load_dims_into_production
-        #[download_noaa_dims] >> dummy1_operator >> [reformat_noaa_dims]
-        #[reformat_noaa_dims] >> dummy2_operator >> [import_noaa_dims]
-        #[import_noaa_dims] >> check_dim_quality_operator
-        #check_dim_quality_operator >> [load_dims_into_production]
 
     # -----------------------------------------------------
     # Run import of Dimension and Fact data in parallel
@@ -346,6 +330,7 @@ with DAG(NOAA_DAG_NAME,
             table = 'f_climate_data',
             where_clause = "source = 'noaa'",
             date_field = 'date_',
+            min_date = NOAA_DATA_AVAILABLE_FROM,
             airflow_var_name = 'noaa_most_recent_data'
             )
         # get_date_of_most_recent_noaa_facts_operator = PythonOperator(
@@ -404,6 +389,15 @@ with DAG(NOAA_DAG_NAME,
         load_noaa_fact_tables_into_postgres_operator >> check_fact_quality_operator
         check_fact_quality_operator >> transform_noaa_facts_operator
 
+    # After successful transfer of data from staging to production,
+    # purge all data from staging tables
+    with TaskGroup("Delete_noaa_staging_data") as delete_noaa_staging_data:
+        # Transfer raw tables to production tables
+        delete_noaa_staging_data_operator = PostgresOperator(
+            task_id="delete_noaa_staging_data",
+            postgres_conn_id=POSTGRES_STAGING_CONN_ID,
+            sql=SqlQueries.delete_noaa_staging_data
+        )
 
     end_operator = DummyOperator(task_id='Stop_execution', dag=dag)
 
@@ -415,5 +409,5 @@ with DAG(NOAA_DAG_NAME,
 start_operator >> create_tables
 create_tables >> run_dim_import
 create_tables >> run_facts_import
-run_dim_import >> end_operator
-run_facts_import >> end_operator
+[run_dim_import, run_facts_import] >> delete_noaa_staging_data
+delete_noaa_staging_data >> end_operator
