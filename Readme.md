@@ -164,6 +164,18 @@ processed.
 
 ## Repository Workflow
 
+### Executing the DAGs
+The project demo consists of three DAGs:
+- noaa_dag
+- openaq_dag
+- process_example_dag
+
+*noaa_dag* and *openaq_dag* are independent of each other and can run in arbitrary order. A parallel run is possible but might not be recommendable in a local setup.
+Once the Airflow UI is running, one can switch on both DAGs and wait until the first run is done. Be aware that downloading and processing all the historic data can take a very long time. Subsequent executions will take much less time.
+
+The *process_example_dag* should be executed on demand and only after the *noaa_dag* ran successfully.
+
+
 ### Passing Secrets & Credentials
 To keep things simple and secure, credentials (e.g. AWS key and secret) need to be set as environment variables in your local environment, i.e. in the environment from
 where the `docker-compose up` is executed.  In my project folder, I created a

@@ -118,10 +118,10 @@ class SqlQueries:
 
     delete_noaa_staging_data = (f"""
         BEGIN ;
-        TRUNCATE TABLE IF EXISTS {NOAA_STAGING_SCHEMA}.f_weather_data_raw ;
-        TRUNCATE TABLE IF EXISTS {NOAA_STAGING_SCHEMA}.ghcnd_stations_raw ;
-        TRUNCATE TABLE IF EXISTS {NOAA_STAGING_SCHEMA}.ghcnd_inventory_raw ;
-        TRUNCATE TABLE IF EXISTS {NOAA_STAGING_SCHEMA}.ghcnd_countries_raw ;
+        TRUNCATE TABLE {NOAA_STAGING_SCHEMA}.f_weather_data_raw ;
+        TRUNCATE TABLE {NOAA_STAGING_SCHEMA}.ghcnd_stations_raw ;
+        TRUNCATE TABLE {NOAA_STAGING_SCHEMA}.ghcnd_inventory_raw ;
+        TRUNCATE TABLE {NOAA_STAGING_SCHEMA}.ghcnd_countries_raw ;
         END ;
         """)
 
@@ -204,7 +204,7 @@ class SqlQueries:
 
     delete_openaq_staging_data = (f"""
         BEGIN ;
-        TRUNCATE TABLE IF EXISTS {OPENAQ_STAGING_SCHEMA}.f_air_data_raw ;
+        TRUNCATE TABLE {OPENAQ_STAGING_SCHEMA}.f_air_data_raw ;
         END ;
         """)
 
