@@ -247,7 +247,7 @@ downloaded and processed.
 With the exemplary settings of *data_available_from* in *./variables/noaa.json*
 and *./variables/openaq.json*, the initial run of the DAGs took about 1-2 hours
 on a current workstation with 10 cores, 16 GB, SSD mass storage and 100MBit/sec.
-internet connection. In addition, one needs approx 150GB of available disk space
+internet connection. In addition, one needs approx 150GB of free disk space
 for storage of the downloaded files and the database tables.
 
 For only a quick test with reduced amount of data, change the settings for
@@ -587,15 +587,18 @@ out-of-the-box (especially not the ones for Udacity degrees).
 # Sources
 
 ## docker-compose.yaml
+
 Based on docker-compose.yaml proposed in [Apache/Airflow and PostgreSQL with Docker and Docker Compose](https://towardsdatascience.com/apache-airflow-and-postgresql-with-docker-and-docker-compose-5651766dfa96)
 
 ## wait_for_postgres.sh
+
 A script for docker's entrypoint applicable to the Airflow webserver and scheduler containers, to wait until the Postgresql database is running and ready to accept connections. Version with own adaptations taken from [wait_for_postgres.sh](https://gist.github.com/zhashkevych/2742682ab57b5670a15291864658625b)
 
 ## Solving permission issues with Staging folder in Docker Container
 
-When using *Volumes* in a Docker Container, write permissions are a frequent issue.  Depending on how a Docker Image was built, mounting a volume will result in user and group to be 'root:root' inside the container. This can cause severe headaches when trying to access the volume - especially when following the security advice to run the container as a non-root user. I ran into this problem when using the official apache/airflow2.0 docker image. Inspiration for an easy and reliable workaround came from [Docker volume mount as non root](https://bhadrajatin.medium.com/docker-volume-mount-as-non-root-77ffae5a79d0). 
+When using *Volumes* in a Docker Container, write permissions are a frequent issue.  Depending on how a Docker Image was built, mounting a volume will result in user and group to be 'root:root' inside the container. This can cause severe headaches when trying to access the volume - especially when following the security advice to run the container as a non-root user. I ran into this problem when using the official apache/airflow2.0 docker image. Inspiration for an easy and reliable workaround came from [Docker volume mount as non root](https://bhadrajatin.medium.com/docker-volume-mount-as-non-root-77ffae5a79d0).
 
 ## Using Task Sensors (but eventually removed from actual use in the project)
+
 Code snippet applied to wait for external tasks.
 [Dependencies between DAGs: How to wait until another DAG finishes in Airflow?](https://www.mikulskibartosz.name/using-sensors-in-airflow/)
