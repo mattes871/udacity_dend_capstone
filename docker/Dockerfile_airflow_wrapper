@@ -1,0 +1,6 @@
+FROM  apache/airflow:latest
+
+USER root
+RUN mkdir ./staging_files && chown airflow:airflow ./staging_files
+ 
+USER airflow

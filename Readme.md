@@ -341,6 +341,9 @@ out-of-the-box (especially not the ones for Udacity degrees).
 ## docker-compose.yaml
 Based on docker-compose.yaml proposed in [Apache/Airflow and PostgreSQL with Docker and Docker Compose](https://towardsdatascience.com/apache-airflow-and-postgresql-with-docker-and-docker-compose-5651766dfa96)
 
+## wait_for_postgres.sh (eventually removed from actual use in the project)
+A script for docker's entrypoint applicable to the Airflow webserver and scheduler containers, to wait until the Postgresql database is running and ready to accept connections: [wait_for_postgres.sh](https://gist.github.com/zhashkevych/2742682ab57b5670a15291864658625b)
+
 ## Using Task Sensors (but eventually removed from actual use in the project)
 Code snippet applied to wait for external tasks.
 [Dependencies between DAGs: How to wait until another DAG finishes in Airflow?](https://www.mikulskibartosz.name/using-sensors-in-airflow/)

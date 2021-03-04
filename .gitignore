@@ -14,3 +14,6 @@ data/*
 staging_files/*
 plugins/operators/__pycache__*
 scripts/test.sh
+scrap.py
+*.swp
+scripts/clean_db.sql

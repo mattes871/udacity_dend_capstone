@@ -2,22 +2,29 @@
 # [Source:] Based on docker-compose.yaml proposed in [Apache/Airflow and PostgreSQL with Docker and Docker Compose](https://towardsdatascience.com/apache-airflow-and-postgresql-with-docker-and-docker-compose-5651766dfa96)
 #
 
-version: "3.8"
+version: "3.0"
 
 volumes:
   postgresql_12_data:
-  # staging_files:
+  # Comment the 'staging_files:' line and add './' in the volumes section
+  # for webserver and scheduler containers
+  # to make 'staging_files' bind to a local directory. Works directly
+  # only on MacOS but requires mapping of user/group-ids on other Linux's
+  # due to missing mapping of users between local host and container
+  staging_files:
   airflow_logs:
 
 services:
   airflow_postgres:
     image: postgres:12
     hostname: airflow_postgres
-    environment:
-      - POSTGRES_USER=airflow
-      - POSTGRES_PASSWORD=airflow
-      - POSTGRES_DB=airflow
-      - POSTGRES_HOST=airflow_postgres
+    #environment:
+      #- POSTGRES_USER=airflow
+      #- POSTGRES_PASSWORD=airflow
+      #- POSTGRES_DB=airflow
+      #- POSTGRES_HOST=airflow_postgres
+    env_file:
+      - docker.env
     ports:
         # Host port=5433 because other Postgres is running on 5432
       - "5433:5432"
@@ -28,28 +35,33 @@ services:
       - postgresql_12_data:/var/lib/postgresql/data
 
   airflow_webserver:
-    image: apache/airflow:latest
+    #image: apache/airflow:latest
+    build:
+      context: ./docker
+      dockerfile: Dockerfile_airflow_wrapper
     hostname: airflow_webserver
     restart: always
     depends_on:
       - airflow_postgres
-    environment:
-      - POSTGRES_USER=airflow
-      - POSTGRES_DB=airflow
-      - POSTGRES_PASSWORD=airflow
-      - POSTGRES_HOST=airflow_postgres
-      - AWS_KEY=${AWS_KEY}
-      - AWS_SECRET=${AWS_SECRET}
-      - AWS_SECRET_URI=${AWS_SECRET_URI}
-      - AWS_REGION=${AWS_REGION}
+    #environment:
+      #- POSTGRES_USER=airflow
+      #- POSTGRES_DB=airflow
+      #- POSTGRES_PASSWORD=airflow
+      #- POSTGRES_HOST=airflow_postgres
+      #- AWS_KEY=${AWS_KEY}
+      #- AWS_SECRET=${AWS_SECRET}
+      #- AWS_SECRET_URI=${AWS_SECRET_URI}
+      #- AWS_REGION=${AWS_REGION}
     env_file:
       - airflow.env
+      - docker.env
     volumes:
       - ./dags:/opt/airflow/dags
       - ./scripts:/opt/airflow/scripts
       - ./plugins:/opt/airflow/plugins
       - ./variables:/opt/airflow/variables
-      - ./staging_files:/opt/airflow/staging_files
+      # - ./staging_files:/opt/airflow/staging_files
+      - staging_files:/opt/airflow/staging_files
       - airflow_logs:/opt/airflow/logs
     ports:
       - "8080:8080"
@@ -62,21 +74,25 @@ services:
       retries:  32
 
   airflow_scheduler:
-    image: apache/airflow:latest
+    #image: apache/airflow:latest
+    build:
+      context: ./docker
+      dockerfile: Dockerfile_airflow_wrapper
     restart: always
     depends_on:
       - airflow_postgres
       - airflow_webserver
-    environment:
-      - POSTGRES_USER=airflow
-      - POSTGRES_DB=airflow
-      - POSTGRES_PASSWORD=airflow
-      - POSTGRES_HOST=airflow_postgres
-      - AWS_KEY=${AWS_KEY}
-      - AWS_SECRET=${AWS_SECRET}
-      - AWS_REGION=${AWS_REGION}
+    #environment:
+      #- POSTGRES_USER=airflow
+      #- POSTGRES_DB=airflow
+      #- POSTGRES_PASSWORD=airflow
+      #- POSTGRES_HOST=airflow_postgres
+      #- AWS_KEY=${AWS_KEY}
+      #- AWS_SECRET=${AWS_SECRET}
+      #- AWS_REGION=${AWS_REGION}
     env_file:
       - airflow.env
+      - docker.env
     ports:
       - "8793:8793"
     volumes:
@@ -84,7 +100,8 @@ services:
       - ./scripts:/opt/airflow/scripts
       - ./plugins:/opt/airflow/plugins
       - ./variables:/opt/airflow/variables
-      - ./staging_files:/opt/airflow/staging_files
+      #- ./staging_files:/opt/airflow/staging_files
+      - staging_files:/opt/airflow/staging_files
       - airflow_logs:/opt/airflow/logs
     # entrypoint: ["./scripts/wait-for-postgres.sh", "postgres", "./scripts/start_airflow_scheduler.sh"]
     entrypoint: ./scripts/start_airflow_scheduler.sh
