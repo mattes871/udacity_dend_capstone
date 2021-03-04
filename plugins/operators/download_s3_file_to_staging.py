@@ -125,7 +125,7 @@ class DownloadS3FileToStagingOperator(BaseOperator):
                 os.rename(full_local_filename, archive_filename)
         # Make sure path for local staging exists
         if not os.path.exists(self.local_path):
-            self.log.info(f"Creating path '{lself.ocal_path}'")
+            self.log.info(f"Creating path '{self.local_path}'")
             os.makedirs(self.local_path)
 
         # Downloading the file
