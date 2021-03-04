@@ -3,6 +3,7 @@
 .DS_Store
 */.DS_Store
 .ipynb_checkpoints/
+variables/connections.json
 set_environment.sh
 __pycache__/*
 */__pycache__/*
