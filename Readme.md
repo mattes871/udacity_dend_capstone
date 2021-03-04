@@ -204,13 +204,14 @@ and [Docker Compose](https://docs.docker.com/compose/install/).
 ### AWS IAM role
 
 The project downloads data from public Amazon S3 buckets. Those buckets can be
-accessed without AWS credentials. However, this information came in last minute
-and all testing has been done using AWS credentials with an AWS_KEY and an
-AWS_SECRET.
+accessed without AWS credentials when using the AWS Command Line Interface.
+However, this information came in last minute and all testing had been done
+using AWS credentials with an AWS_KEY and an AWS_SECRET.  The current
+implementation does not work without proper AWS credentials.
 
 ## Installing the Repository
 
-Once Docker + Docker Compose are installed and running on your system, you can
+Once Docker and Docker Compose are installed and running on your system, you can
 download the repository from GitHub:
 [Udacity Capstone Project / Climate Data](https://github.com/mattes871/udacity_dend_capstone)
 
@@ -240,6 +241,21 @@ Username is 'admin', same is the password.
 
 Activate the *noaa_dag* and the *openaq_dag* and sit back while the data is
 downloaded and processed.
+
+### Runtimes and Storage Requirements
+
+With the exemplary settings of *data_available_from* in *./variables/noaa.json*
+and *./variables/openaq.json*, the initial run of the DAGs took about 1-2 hours
+on a current workstation with 10 cores, 16 GB, SSD mass storage and 100MBit/sec.
+internet connection. In addition, one needs approx 150GB of available disk space
+for storage of the downloaded files and the database tables.
+
+For only a quick test with reduced amount of data, change the settings for
+*data_available_from* in the files *./variables/noaa.json* and
+*./variables/openaq.json* to '2021-02-01'. This is a decent value that brings
+down the time for download and execution significantly while still fulfilling
+the requirement to process more than 1 Million records.
+
 
 ## Repository Workflow
 
@@ -573,8 +589,8 @@ out-of-the-box (especially not the ones for Udacity degrees).
 ## docker-compose.yaml
 Based on docker-compose.yaml proposed in [Apache/Airflow and PostgreSQL with Docker and Docker Compose](https://towardsdatascience.com/apache-airflow-and-postgresql-with-docker-and-docker-compose-5651766dfa96)
 
-## wait_for_postgres.sh (eventually removed from actual use in the project)
-A script for docker's entrypoint applicable to the Airflow webserver and scheduler containers, to wait until the Postgresql database is running and ready to accept connections: [wait_for_postgres.sh](https://gist.github.com/zhashkevych/2742682ab57b5670a15291864658625b)
+## wait_for_postgres.sh
+A script for docker's entrypoint applicable to the Airflow webserver and scheduler containers, to wait until the Postgresql database is running and ready to accept connections. Version with own adaptations taken from [wait_for_postgres.sh](https://gist.github.com/zhashkevych/2742682ab57b5670a15291864658625b)
 
 ## Using Task Sensors (but eventually removed from actual use in the project)
 Code snippet applied to wait for external tasks.

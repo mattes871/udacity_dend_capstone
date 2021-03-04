@@ -1,10 +1,10 @@
 #!/bin/sh
 # wait-for-postgres.sh
+# Source: https://gist.github.com/zhashkevych/2742682ab57b5670a15291864658625b
+# Own adaptations to use POSTGRES environment variables 
 
 set -e
 
-#host="$1"
-#shift
 cmd="$@"
 
 until PGPASSWORD=$POSTGRES_PASSWORD psql -h "$POSTGRES_HOST" -U "$POSTGRES_USER" -c '\q'; do
