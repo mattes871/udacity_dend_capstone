@@ -193,11 +193,13 @@ The project uses Docker containers to provide a platform agnostic setup.
 
 To install and run the repository, you need Docker and Docker Compose installed
 on your computer.  The project was implemented and tested with Docker Engine
-v20.10.2 and Docker Compose 1.27.4 on MacOS 10.14.6.
+v20.10.2 and Docker Compose 1.27.4 on MacOS 10.14.6. A separate deployment using
+Docker v20.10.5 and Docker Compose 1.27.4 on Ubuntu 18.04.03 LTS worked
+out-of-the-box.
 
-For download and installation instructions checkout for
+For download and installation instructions of Docker and Docker Compose checkout
 [Docker](https://docs.docker.com/engine/install/)
-and for [Docker Compose](https://docs.docker.com/compose/install/).
+and [Docker Compose](https://docs.docker.com/compose/install/).
 
 ### AWS IAM role
 
@@ -226,6 +228,9 @@ Once the AWS credentials are provided, go to the main project directory and exec
 > docker-compose up
 
 This will spawn a postgres database, the airflow webserver and the scheduler.
+When launching for the first time, Airflow might raise warnings about missing
+variables/keys. These can be safely ignored as the variables are loaded at a
+later point.
 
 The Airflow UI will be available at
 
