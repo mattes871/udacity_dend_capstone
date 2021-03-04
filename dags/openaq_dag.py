@@ -195,7 +195,7 @@ with DAG(OPENAQ_DAG_NAME,
                 table = f'{OPENAQ_STAGING_SCHEMA}.f_air_data_raw',
                 delimiter = f'{CSV_DELIMITER}',
                 quote = f'{CSV_QUOTE_CHAR}',
-                truncate_table = False, #True,
+                truncate_table = True,
                 local_path = os.path.join(OPENAQ_STAGING_FACTS,
                                           "{{ yesterday_ds }}"),
                 file_pattern = f'*.csv',
@@ -241,7 +241,7 @@ with DAG(OPENAQ_DAG_NAME,
         delete_openaq_staging_data_operator = PostgresOperator(
             task_id="delete_openaq_staging_data",
             postgres_conn_id=POSTGRES_STAGING_CONN_ID,
-            sql=SqlQueries.delete_openaq_staging_data
+            sql='-- do nothing' #SqlQueries.delete_openaq_staging_data
         )
 
     end_operator = DummyOperator(task_id='Stop_execution', dag=dag)

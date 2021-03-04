@@ -50,7 +50,8 @@ class SqlQueries:
             latitude::numeric,
             longitude::numeric,
             elevation::numeric,
-            state, name
+            left(id,2) as country_id,
+            name
         FROM {NOAA_STAGING_SCHEMA}.ghcnd_stations_raw
         WHERE id is not null
         ON CONFLICT (station_id, source) DO NOTHING
@@ -161,11 +162,11 @@ class SqlQueries:
             latitude::numeric,
             longitude::numeric,
             -99999.9 as elevation,
-            country as state, -- openaq country-field is varchar(2)
+            country as country_id, -- openaq country-field is varchar(2)
             left(location,30) as name
         FROM {OPENAQ_STAGING_SCHEMA}.f_air_data_raw
         WHERE left(date_utc,10) >= '{OPENAQ_DATA_AVAILABLE_FROM}'
-        GROUP BY station_id, source, latitude, longitude, elevation, state, name
+        GROUP BY station_id, source, latitude, longitude, elevation, country_id, name
         ON CONFLICT (station_id, source) DO NOTHING
         ;
         """)
@@ -217,10 +218,10 @@ class SqlQueries:
         SELECT
             f_agg.station_id,
             month,
-            max(CASE WHEN common_kpi_name = 'TMAX' THEN max_data_value ELSE -9999 END)/10.0 as max_tmax_c,
-            max(CASE WHEN common_kpi_name = 'TMIN' THEN min_data_value ELSE -9999 END)/10.0  as min_tmin_c,
-            max(CASE WHEN common_kpi_name = 'TMAX' THEN avg_data_value ELSE -9999 END)/10.0  as avg_tmax_c,
-            max(CASE WHEN common_kpi_name = 'TMIN' THEN avg_data_value ELSE -9999 END)/10.0  as avg_tmin_c,
+            max(CASE WHEN common_kpi_name = 'TMAX' THEN max_data_value ELSE -9999 END) as max_tmax_c,
+            max(CASE WHEN common_kpi_name = 'TMIN' THEN min_data_value ELSE -9999 END)  as min_tmin_c,
+            max(CASE WHEN common_kpi_name = 'TMAX' THEN avg_data_value ELSE -9999 END)  as avg_tmax_c,
+            max(CASE WHEN common_kpi_name = 'TMIN' THEN avg_data_value ELSE -9999 END)  as avg_tmin_c,
             sum(CASE WHEN common_kpi_name = 'PRCP' THEN sum_data_value ELSE 0 END) as sum_prcp
         FROM
             (SELECT
@@ -232,10 +233,10 @@ class SqlQueries:
                 max(data_value) as max_data_value,
                 sum(data_value) as sum_data_value
             FROM {PRODUCTION_SCHEMA}.f_climate_data
-            WHERE substr(station_id,5,2) = 'GM' -- Germany
             GROUP BY station_id, month, common_kpi_name) as f_agg
-        JOIN {PRODUCTION_SCHEMA}.d_stations as d
-        ON f_agg.station_id = d.station_id
+        JOIN {PRODUCTION_SCHEMA}.d_stations as st
+        ON f_agg.station_id = st.station_id
+        WHERE d.country_id = 'GM'
         GROUP BY f_agg.station_id, month
         ;
         """)

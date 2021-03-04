@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS production.d_stations (
     latitude numeric,            -- Geographical location
     longitude numeric,           -- Geographical location
     elevation numeric,           -- Elevation of station
-    state varchar(2),            -- country id
+    country_id varchar(2),       -- country id (=state in noaa dataset)
     name varchar(30),            -- Human readable station name
     --gsn_flag varchar(3),
     --hcn_crn_flag varchar(3),
