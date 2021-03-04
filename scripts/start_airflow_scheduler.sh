@@ -1,5 +1,5 @@
 #!/bin/bash
 
-# sleep 90
+sleep 90
 
 airflow scheduler -D
