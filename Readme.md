@@ -592,6 +592,10 @@ Based on docker-compose.yaml proposed in [Apache/Airflow and PostgreSQL with Doc
 ## wait_for_postgres.sh
 A script for docker's entrypoint applicable to the Airflow webserver and scheduler containers, to wait until the Postgresql database is running and ready to accept connections. Version with own adaptations taken from [wait_for_postgres.sh](https://gist.github.com/zhashkevych/2742682ab57b5670a15291864658625b)
 
+## Solving permission issues with Staging folder in Docker Container
+
+When using *Volumes* in a Docker Container, write permissions are a frequent issue.  Depending on how a Docker Image was built, mounting a volume will result in user and group to be 'root:root' inside the container. This can cause severe headaches when trying to access the volume - especially when following the security advice to run the container as a non-root user. I ran into this problem when using the official apache/airflow2.0 docker image. Inspiration for an easy and reliable workaround came from [Docker volume mount as non root](https://bhadrajatin.medium.com/docker-volume-mount-as-non-root-77ffae5a79d0). 
+
 ## Using Task Sensors (but eventually removed from actual use in the project)
 Code snippet applied to wait for external tasks.
 [Dependencies between DAGs: How to wait until another DAG finishes in Airflow?](https://www.mikulskibartosz.name/using-sensors-in-airflow/)

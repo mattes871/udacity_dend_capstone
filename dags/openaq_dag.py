@@ -241,7 +241,7 @@ with DAG(OPENAQ_DAG_NAME,
         delete_openaq_staging_data_operator = PostgresOperator(
             task_id="delete_openaq_staging_data",
             postgres_conn_id=POSTGRES_STAGING_CONN_ID,
-            sql='-- do nothing' #SqlQueries.delete_openaq_staging_data
+            sql='select 1 ; --do nothing' #SqlQueries.delete_openaq_staging_data
         )
 
     end_operator = DummyOperator(task_id='Stop_execution', dag=dag)
