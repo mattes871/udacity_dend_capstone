@@ -7,9 +7,6 @@ airflow db init
 echo "---------- Upgrading Airflow DB -------------------------------"
 airflow db upgrade
 
-# sleep 20
-# airflow flower
-
 echo "Creating UI user (admin/admin)"
 airflow users create --username admin --firstname Air --lastname Flow --role Admin --email airflow@airflow.com -p admin
 

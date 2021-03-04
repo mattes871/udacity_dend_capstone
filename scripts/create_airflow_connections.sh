@@ -2,6 +2,7 @@
 
 ## Using ENV variables
 ## AWS environment variables should be defined in docker-compose.yaml
+## or docker.env file
 
 ## Define the necessary connections for airflow (delete previous definitions)
 
