@@ -33,7 +33,7 @@ class CompletenessCheckFilesVsPostgresOperator(BaseOperator):
 
         super(CompletenessCheckFilesVsPostgresOperator, self).__init__(*args, **kwargs)
         self.postgres_conn_id = postgres_conn_id
-        self.schema = schema,
+        self.schema = schema
         self.table = table
         self.local_path, = local_path,
         self.header_line = header_line
@@ -68,8 +68,7 @@ class CompletenessCheckFilesVsPostgresOperator(BaseOperator):
             return all_csv_files
 
 
-        self.log.debug(f"Run LocalCSVToPostgresOperator({self.table},\n"+
-                      f"    '{self.delimiter}',\n"+
+        self.log.info(f"Run CompletenessCheckFilesVsPostgresOperator({self.table},\n"+
                       f"    {self.local_path},\n"+
                       f"    {self.file_pattern}")
         # Get the number of lines from the text files
@@ -77,17 +76,17 @@ class CompletenessCheckFilesVsPostgresOperator(BaseOperator):
         self.log.info(f"Found {len(text_files)} files for import.")
         total_lines_in_text_files = -1
         for text_file in text_files:
-            total_lines_in_text_files += file_len(postgres, text_file)
+            total_lines_in_text_files += file_len(text_file)
 
         # Now count the number of records in the given table
         postgres = PostgresHook(self.postgres_conn_id)
         connection = postgres.get_conn()
         cursor = connection.cursor()
-        cursor.execute(LocalCSVToPostgresOperator.count_sql \
+        cursor.execute(CompletenessCheckFilesVsPostgresOperator.count_sql \
                             .format(self.schema, self.table))
         result = cursor.fetchone()
-        number_of_records = bigint(result[0])
+        number_of_records = int(result[0])
 
-        # Throw an AssertionError if the lines in the files and records 
+        # Throw an AssertionError if the lines in the files and records
         # in the table are different
         assert (total_lines_in_text_files == number_of_records), f"Number of lines in '{self.file_pattern}' is {total_lines_in_text_files} but number of records in '{self.schema}.{self.table}' is {number_of_records}!"

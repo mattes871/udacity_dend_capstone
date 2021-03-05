@@ -470,13 +470,23 @@ processing time (see also later paragraph on "(Not) Cleaning up Staging table").
 Data quality checks should be performed on the data in the Postgres staging
 area. While there are many tools for (fast) data manipulation also on the
 filesystem level, it seems much more appropriate for large data volumes to do
-this step based on Postgres or other database platforms. The
-*DataQualityOperator* implemented here, offers some basic test capabilities via
-a list of SQL statements and expected - or unexpected - values. Currently, five
-different checks are defined in *helpers.DataQualityChecks*. For a proper
-production system, more sophisticated tests would need to be implemented (e.g.
-checking the number of lines in the files downloaded and comparing that to the
-number of records ingested).
+this step based on Postgres or other database platforms.  The two data quality
+operators implemented so far, offer basic test capabilities for completeness of
+loaded data and the validity of field contents.
+
+The *CompletenessCheckFilesVsPostgres* compares the number of lines in a (set
+of) text files against the number of records in a Postgresql table. If the
+ingest process went well, both numbers should be the same (minus the number of
+header lines). Otherwise, the loading process went wrong and the operator raises
+an *AssertionError*.
+
+The *DataQualityOperator* takes a list of SQL statements and their expected - or
+unexpected - outcome values. Currently, five different checks on NOAA and OpenAQ
+data are defined in *helpers.DataQualityChecks*. Unexpected outcomes raise *ValueErrors*.
+
+For a proper production system, more sophisticated
+tests would need to be implemented (e.g. checking the number of lines in the
+files downloaded and comparing that to the number of records ingested).
 
 #### Transferring Data from Staging to Production
 

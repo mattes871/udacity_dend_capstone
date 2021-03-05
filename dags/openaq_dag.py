@@ -206,10 +206,14 @@ with DAG(OPENAQ_DAG_NAME,
         download_openaq_files >> reformat_openaq_files
         reformat_openaq_files >>  import_openaq_files
 
+        # Run Data Quality Checks on
+        # - Completeness of data (#lines in file vs. #records inserted)
+        # - Validity of field values & counts
         with TaskGroup("check_openaq_dataquality") as check_openaq_dataquality:
             # Run quality checks on fact data
             completeness_check_openaq_operator = CompletenessCheckFilesVsPostgresOperator(
                 task_id = 'Completeness_check_openaq',
+                postgres_conn_id = POSTGRES_STAGING_CONN_ID,
                 schema = f'{OPENAQ_STAGING_SCHEMA}',
                 table = 'f_air_data_raw',
                 local_path = os.path.join(OPENAQ_STAGING_FACTS,
