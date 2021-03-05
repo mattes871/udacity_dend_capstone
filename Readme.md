@@ -710,6 +710,11 @@ A script for docker's entrypoint applicable to the Airflow webserver and schedul
 
 When using *Volumes* in a Docker Container, write permissions are a frequent issue.  Depending on how a Docker Image was built, mounting a volume will result in user and group to be 'root:root' inside the container. This can cause severe headaches when trying to access the volume - especially when following the security advice to run the container as a non-root user. I ran into this problem when using the official apache/airflow2.0 docker image. Inspiration for an easy and reliable workaround came from [Docker volume mount as non root](https://bhadrajatin.medium.com/docker-volume-mount-as-non-root-77ffae5a79d0).
 
+## Code snippet for fast counting number of lines in a text file
+
+Code snippet for fast (exact) counting of number of lines in a text file, used for the data quality operator.
+[Source](https://stackoverflow.com/questions/845058/how-to-get-line-count-of-a-large-file-cheaply-in-python)
+
 ## Using Task Sensors (but eventually removed from actual use in the project)
 
 Code snippet applied to wait for external tasks.
