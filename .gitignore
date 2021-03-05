@@ -18,3 +18,4 @@ scripts/test.sh
 scrap.py
 *.swp
 scripts/clean_db.sql
+todos.md

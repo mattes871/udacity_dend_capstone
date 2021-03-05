@@ -67,8 +67,8 @@ class SqlQueries:
             'noaa' as source,
             kpi.common_kpi_name,
             kpi.common_unit,
-            raw.from_year as from_year,
-            raw.until_year as until_year
+            raw.from_year::int as from_year,
+            raw.until_year::int as until_year
         FROM {NOAA_STAGING_SCHEMA}.ghcnd_inventory_raw as raw
         JOIN {PRODUCTION_SCHEMA}.d_kpi_names as kpi
         ON raw.element = kpi.orig_kpi_name
@@ -163,7 +163,7 @@ class SqlQueries:
             longitude::numeric,
             -99999.9 as elevation,
             country as country_id, -- openaq country-field is varchar(2)
-            left(location,30) as name
+            left(location,50) as name
         FROM {OPENAQ_STAGING_SCHEMA}.f_air_data_raw
         WHERE left(date_utc,10) >= '{OPENAQ_DATA_AVAILABLE_FROM}'
         GROUP BY station_id, source, latitude, longitude, elevation, country_id, name
@@ -236,7 +236,7 @@ class SqlQueries:
             GROUP BY station_id, month, common_kpi_name) as f_agg
         JOIN {PRODUCTION_SCHEMA}.d_stations as st
         ON f_agg.station_id = st.station_id
-        WHERE d.country_id = 'GM'
+        WHERE st.country_id = 'GM'
         GROUP BY f_agg.station_id, month
         ;
         """)
