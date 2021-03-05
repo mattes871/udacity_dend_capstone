@@ -15,6 +15,7 @@ from airflow.providers.postgres.operators.postgres import PostgresOperator
 
 from operators.create_tables import CreateTablesOperator
 from operators.data_quality import DataQualityOperator
+from operators.completeness_check_files_vs_postgres import CompletenessCheckFilesVsPostgresOperator
 from operators.reformat_fixed_width_file import ReformatFixedWidthFileOperator
 from operators.local_csv_to_postgres import LocalCSVToPostgresOperator
 from operators.openaq.download_openaq_files import DownloadOpenAQFilesOperator
@@ -205,12 +206,23 @@ with DAG(OPENAQ_DAG_NAME,
         download_openaq_files >> reformat_openaq_files
         reformat_openaq_files >>  import_openaq_files
 
-        # Run quality checks on dimension data
-        check_openaq_quality_operator = DataQualityOperator(
-            task_id='Check_openaq_quality',
-            postgres_conn_id = POSTGRES_STAGING_CONN_ID,
-            dq_checks = DataQualityChecks.dq_checks_openaq,
-            )
+        with TaskGroup("check_openaq_dataquality") as check_openaq_dataquality:
+            # Run quality checks on fact data
+            completeness_check_openaq_operator = CompletenessCheckFilesVsPostgresOperator(
+                task_id = 'Completeness_check_openaq',
+                schema = f'{OPENAQ_STAGING_SCHEMA}',
+                table = 'f_air_data_raw',
+                local_path = os.path.join(OPENAQ_STAGING_FACTS,
+                                          "{{ yesterday_ds }}"),
+                file_pattern = '*.csv',
+                header_line = True # The reformatted csv files do have a header line
+                )
+            # Run quality checks on dimension data
+            check_openaq_quality_operator = DataQualityOperator(
+                task_id = 'Check_openaq_quality',
+                postgres_conn_id = POSTGRES_STAGING_CONN_ID,
+                dq_checks = DataQualityChecks.dq_checks_openaq,
+                )
 
         with TaskGroup("Load_openaq_into_production") as load_openaq_into_production:
             # Transfer raw tables to production tables
@@ -231,8 +243,8 @@ with DAG(OPENAQ_DAG_NAME,
 
             load_openaq_stations_operator >> load_openaq_facts_operator
 
-        import_openaq_files >> check_openaq_quality_operator
-        check_openaq_quality_operator >> load_openaq_into_production
+        import_openaq_files >> check_openaq_dataquality
+        check_openaq_dataquality >> load_openaq_into_production
 
     # After successful transfer of data from staging to production,
     # purge all data from staging tables
