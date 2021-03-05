@@ -475,14 +475,18 @@ operators implemented so far, offer basic test capabilities for completeness of
 loaded data and the validity of field contents.
 
 The *CompletenessCheckFilesVsPostgres* compares the number of lines in a (set
-of) text files against the number of records in a Postgresql table. If the
-ingest process went well, both numbers should be the same (minus the number of
-header lines). Otherwise, the loading process went wrong and the operator raises
-an *AssertionError*.
+of) text files against the number of records in a Postgresql table. With this
+test it is possible to check whether all lines from a source file have been
+loaded into the Postgresql table. If the ingest process went well, both numbers
+should be the same (minus the number of header lines). Otherwise, the loading
+process went wrong and the operator raises an *AssertionError*.
 
-The *DataQualityOperator* takes a list of SQL statements and their expected - or
-unexpected - outcome values. Currently, five different checks on NOAA and OpenAQ
-data are defined in *helpers.DataQualityChecks*. Unexpected outcomes raise *ValueErrors*.
+The *DataQualityOperator* takes a list of SQL statements and tests their results
+against a corresponding list of expected outcomes, e.g. counting the number of
+null values in an ID column and checking if the count is actually 0, otherwise
+raising a *ValueError* because there should not be any null values in that column.
+Currently, five different checks on NOAA and OpenAQ
+data are defined in *helpers.DataQualityChecks*.
 
 For a proper production system, more sophisticated
 tests would need to be implemented (e.g. checking the number of lines in the
