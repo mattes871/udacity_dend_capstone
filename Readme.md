@@ -35,41 +35,101 @@ air pollution. The data is compiled and provided by
   Department of Commerce
 * and [OpenAQ](https://openaq.org/)
 
-### NOAA dataset
-**Scope**: 160,000 stations worldwide, partially dating back until 1763
-**Measures**: 5 core KPIs (Min/Max temperature, precipitation, snowfall, snow depth), 50+ further KPIs
-**Source platform**: AWS S3 bucket
-**File structure**: One file per year, all in the same directory; current year's
-file gets daily updates appended
-**Format**: csv, csv.gz
-**Downloads**: https://docs.opendata.aws/noaa-ghcn-pds/readme.html
+#### NOAA dataset
+
+* **Scope**: 160,000 stations worldwide, partially dating back until 1763
+* **Measures**: 5 core KPIs (Min/Max temperature, precipitation, snowfall, snow
+depth), 50+ further KPIs **Source platform**: AWS S3 bucket **File
+structure**: One file per year, all in the same directory; current year's file
+gets daily updates appended
+* **Format**: csv, csv.gz
+* **Downloads**: https://docs.opendata.aws/noaa-ghcn-pds/readme.html
 
 See https://docs.opendata.aws/noaa-ghcn-pds/readme.html for more details.
 
-### OpenAQ dataset
-**Scope**: 8,000 stations in 90 countries with hourly to daily data back to 2013; > 1.5 Mio measurements per day
-**Measures**: 12 different KPIs and measurement units
+#### OpenAQ dataset
+
+* **Scope**: 8,000 stations in 90 countries with hourly to daily data back to 2013; > 1.5 Mio measurements per day
+* **Measures**: 12 different KPIs and measurement units
 Amount of Ozone, Particle matter (10, 2.5), Carbon Monoxide, Sulphur Dioxide, Nitrogen Dioxide
-**Source platform**: AWS S3 bucket
-**File structure**: Separate daily directories back until Nov 2013, each populated with sets of .ndjson-Files .
-**Format**: ndjson, ndjson.gz
-**Downloads**: https://openaq-fetches.s3.amazonaws.com/index.html
+* **Source platform**: AWS S3 bucket
+* **File structure**: Separate daily directories back until Nov 2013, each populated with sets of .ndjson-Files .
+* **Format**: ndjson, ndjson.gz
+* **Downloads**: https://openaq-fetches.s3.amazonaws.com/index.html
 
 See https://openaq-fetches.s3.amazonaws.com/index.html and https://github.com/openaq/openaq-data-format for more details.
 
 Access to both datasets is also possible via AWS CLI:
 > aws s3 ls <bucket-name> --no-sign-request
 
+### The Data Model
 
-The definition for the staging tables tables can be found in
+As this project aims at providing a harmonised and condensed set of most
+relevant climate measurements to the amateur researcher, the main use case for
+the actual data lies in aggregating and extracting portions of the data relevant
+to the researchers' use cases.  This will mainly be filtering, aggregation and
+regular (incremental) fetching of the data over various dimensions, like
+geo-location, date and type of measurement.  As the required operations greatly
+depend on the researchers' use cases, the data model should allow a good balance
+between flexibility and efficient processing of data at large scale.  
+
+I chose a Star-Schema model on a relational database as it provides the required
+flexibility for selections and aggregations while it still manages large data
+volumes if indexes and partitions of the model are well designed and maintained.
+Assuming that in the future different users with different use cases will be
+selecting, aggregating and fetching the data they need from this platform, this
+flexibility is required. At least until becomes clear from actual usage, which
+operations on the database are most needed. If it turns out that data amount of
+data increased by a factor of 100 and 99% of usage is slicing the data by
+date, kpi and country, a key-value redesign would make sense.
+
+For the sake of simplicity (and thus in line with the project goal), the Data
+Model in the project consists of only three different entities:
+
+* Physical locations: the point of measurement incl. geo-coordinates
+* Measurements:  the actual matter that is measured, its unit and its value
+* Data Sources: So far only OpenAQ or NOAA, no metadata attached
+
+These entities are distributed over one fact and four dimension tables tailored
+for convenient access - especially filtering of the measurements. One of the
+assumptions in the table design is that filtering will happen a lot on physical
+locations, especially countries. That is why for example the *country_id* field
+was added to the fact table even though it could be joined from the *d_stations*
+table. Due to the small size of the *country_id* field (varchar(2)), the extra
+storage space seemed justified in light of the more efficient filtering.
+
+Regarding storage space: the current version of the database is not optimised
+for most efficient storage. In a future optimisation, all identifier-fields, for
+example the combination of *common_kpi_name* and *common_unit*, could be mapped
+onto simple numbers (bigint or uuid), which would reduce the required space in
+the facts table significantly. At the same time, it would also reduce
+readability of the data when working with it.
+
+Another design decision for the data model is the introduction of a lookup table
+for the different measurement types and units. Apparently, KPI names and
+measurement units can vary between data sources and often even within a source.
+Hence, *d_kpi_names* provides a complete mapping from the source measures to the
+harmonized names and units used in the production table. It also contains a
+description for each entry that can include transformation rules, if such a step
+is necessary. One example of this is the temperature data from NOAA. As NOAA
+delivers only integer values for its measurements, temperatures are provided in
+1/10 degrees Celsius, i.e. 203 meaning 20.3°C. As the production table features
+a decimal format, temperatures are transformed to the more intuitive
+decimal format.
+
+
+The complete Data Dictionary including table structure, fields, data types,
+links between fields, constraints and a description can be found in this
+[Excel table](./data-dictionary.xlsx) or in this  
+[semi-colon-delimited version](./data-dictionary.csv).
+
+
+The actual SQL-definition for the production tables can be found in
+[create_common_tables.sql](./dags/sql/create_common_tables.sql)
+
+The same for the staging tables tables can be found in
 [create_noaa_tables.sql](./dags/sql/create_noaa_tables.sql),  
 [create_openaq_tables.sql](./dags/sql/create_openaq_tables.sql).
-
-A *data-dictionary* for the production tables can be found in
-[create_common_tables.sql](./dags/sql/create_common_tables.sql) (i.e. the
-  concrete table definitions with comments for each fields.)
-
-
 
 
 ## Scope of the Project
@@ -94,17 +154,12 @@ Not in scope:
 - Performance tuning for components and underlying container infrastructure
 
 
-## Design Considerations [also a note to the reviewer]
+## Design Considerations
 
-After a first look at the data sources, it is clear that the amount of data
-already qualifies as Big Data. At least when taking into account all the
-available history. At the same time, my current time budget is very tight and my
-employer - who is paying for this course - expects me to finish the degree as
-soon as possible. Hence, I am trying to balance my project aspirations with the
-choice of an infrastructure that allows fast development and provides an almost
-instantaneous response when triggering experiments. Another consideration are
-costs. Having exceeded my Udacity-provided AWS allowance already in November, a
-nice Redshift server and ECM cluster are not in the budget any longer.  
+The project prototype is based on:
+- Docker Containers for a reproducible environment
+- Airflow 2.0 for the workflow management
+- Postgresql 12 as a relational data storage and processing engine
 
 Taking these non-technical constraints into account, a local solution based on
 Docker Containers, Apache Airflow and a Postgresql server seems to offer both:
@@ -117,21 +172,56 @@ an increased number of users.
 ### Airflow 2.0
 
 Airflow is one of the standard frameworks for orchestrating workflows in data
-engineering. As Airflow is now also supporting Kubernetes, it seems to be a safe
-choice in terms of computational scalability. In my local implementation,
-however, Airflow has to make do with a LinearExecutor and maximum 10 Cores. I
-chose Airflow version 2.0 because of the much more reliable grouping of sub
-tasks using *TaskGroup*s in contrast to the older SubDAG feature.   
+engineering. Its focus on Python and the availability of pre-defined Hooks and
+Operators to connect to basically all of the popular data platforms and their
+APIs, makes it an easy-to-start-with framework. In addition, the fact that the
+actual processing is not done by Airflow but in the orchestrated components,
+makes it lightweight and efficient enough to handle large production workflows.
+If the workload increases, a scaling of the component can solve the problem and
+might not require a redesign of the workflow as such.  As Airflow is now also
+supporting Kubernetes, it seems to be a safe choice in terms of computational
+scalability.  
+
+For the project at hand, Airflow needs to manage the daily update of the
+production database by orchestrating the download and processing of data from
+different sources. Airflow already comes with most of the required Connectivity
+and thus allows a very quick integration of new data sources. Dealing with
+different sources also means dealing with different data formats. With its
+natural focus on Python, handling various data formats (.csv, .json, gzipped
+files, ...) can be done easily by using the whole universe of Python packages
+and expertise (e.g. using boto3 for some special access to S3 that was not
+available via the AWS Hooks). Talking about expertise, most Data Scientists and
+Engineers are proficient in Python.
+
+Reasons to choose Airflow 2.0:
+* Workflow framework, actual work happens in components
+* Lots of Operators and Hooks to connect to all popular Data Sources & APIs
+* Focus on Python = quick learning curve + lots of existing code & expertise
+* Platform agnostic
 
 ### Postgresql 12
 
 Postgresql is my standard choice whenever there is no apparent reason to go for
 a more specialized non-SQL database. In this use-case, the goal is to provide a
-multi-purpose database, a flexible basis for reporting, analysis and extraction
-of data. Thus, a relational database seems a good choice. With further improved
-performance and scalability in versions 12 and above, Postgresql works well even
-on very large datasets - given that indexes and partitions are designed well. In
-case of even larger data volumes, Hive could be an alternative.
+multi-purpose database: a flexible basis for reporting, analysis and extraction
+of data. The data is coming in daily batches and no real-time requirements need
+to be considered. Thus, a relational database is a good choice. With further
+improved performance and scalability in versions 12 and above, Postgresql works
+well even on very large datasets - given that indexes and partitions are
+designed well.
+
+In this project, Postgresql is the actual work horse as the aggregation and
+transformation of data from the different sources is done using SQL. While this
+is a matter of taste, SQL is an easy-to-understand and very well suited language
+for the kinds of aggregations and transformations required in this project. Once
+the data is loaded into the staging schema of Postgresql, the heavy lifting for
+import process is defined in a few lines of easy-to-understand and thus
+easy-to-maintain SQL statements.
+
+Last but not least, another reason to go for Postgresql over other relational
+databases, is its ability to automatically resolve conflicts in insertion mode
+('ON CONFLICT' clause).
+
 
 ### Docker & Docker Compose
 
@@ -520,16 +610,22 @@ combination with the weather station coordinates.
 
 The current Postgresql Container is multi-user capable but currently set up with
 a single standard user (*airflow*) whose access credentials are accessible
-within the project repository.
+within the project repository. If the container got deployed in a less secure
+environment, attackers would have an easy game of getting admin rights to the
+whole database (e.g. by guessing the password)
 
-Measure: Harden Postgresql Database / Container
+Measure: Harden Postgresql Database / Container, e.g. by restricting access to
+Postgresql via the configuration pg_hba.cfg. A great list of measures is
+provided in the EDB Blog on
+[How to secure Postgresql: Security Hardening Best Practices & Tips](https://www.enterprisedb.com/blog/how-to-secure-postgresql-security-hardening-best-practices-checklist-tips-encryption-authentication-vulnerabilities)
 
 A future scenario where dozens or hundreds of users have accounts on the
 database machine and might use them concurrently, would require a massive scale
 up of the number of database connections possible and thus an upgrade of the
 underlying database infrastructure.
 
-Measure: Moving to a distributed database setup and introduction of replication to avoid deadlocks.
+Measure: Moving to a distributed database setup and introduction of replication
+to avoid deadlocks.
 
 Although the containers can be easily used on any Virtual Machine, the current
 setup is not optimised around scalability of the underlying infrastructure but
@@ -543,7 +639,9 @@ replication.
 
 The prototype tries to keep download volumes as low as possible. Still
 downloading can take a significant amount of time especially when catching up on
-missed time intervals.
+missed time intervals, e.g. depending on the time of day, download times for one
+month of daily OpenAQ files varied between 5 minutes to one hour (Downloading
+from US-East-1 to Europe).
 
 Measure: Move the infrastructure closer to the data, e.g. onto AWS servers in
 region US-EAST-1 (assuming that all data is part of the AWS Open Data

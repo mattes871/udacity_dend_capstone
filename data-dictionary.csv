@@ -1,0 +1,35 @@
+﻿Entity;Schema;Table;Field;Type;Allowed values;Constraints;Description / Definition;Linked to
+;production;f_climate_data;-;-;;-;Fact table. Contains the harmonized daily measurements of climate data by station from different sources.;
+Physical Location;production;f_climate_data;station_id;varchar;;value required, part of primary key;Unique identifier for weather station;production.d_stations
+Data Source;production;f_climate_data;source;varchar;openaq', 'noaa';value required;Identifier for data source.;
+Measurement;production;f_climate_data;date_;date;;value required, part of primary key, partition key;Date of measurement;
+Measurement;production;f_climate_data;common_kpi_name;varchar;values from d_kpi_names.common_kpi_names;value required, part of primary key;Name of climate KPI as defined in production.d_kpi_names;production.d_kpi_names
+Measurement;production;f_climate_data;common_unit;varchar;values from d_kpi_names.common_unit;value required, part of primary key;Name of measurement unit as defined in production.d_kpi_names;production.d_kpi_names
+Measurement;production;f_climate_data;data_value;numeric;;-;Numeric value of measurement or aggregation;
+Measurement;production;f_climate_data;observ_time;varchar;;-;Optional: Local time of measurement if measurement is done daily - not intradaily.;
+;production;d_stations;-;-;;-;Dimension table. Meta data on each station, especially geographical location;
+Physical Location;production;d_stations;station_id;varchar;;value required, primary key;Unique identifier for weather station;
+Physical Location;production;d_stations;source;varchar;openaq', 'noaa';value required;Identifier for data source.;
+Physical Location;production;d_stations;latitude;numeric;>= -90.0 & <= 90.0;-;Geographical latitude of station;
+Physical Location;production;d_stations;longitude;numeric;>= -180.0 & <= 180.0;-;Geographical longitude of station;
+Physical Location;production;d_stations;elevation;numeric;;-;Option: Elevation of station in meters above sea level;
+Physical Location;production;d_stations;country_id;varchar(2);values from d_countries;-;Common 2-Character abbreviation of station's country (see production.d_countries);production.d_countries
+Physical Location;production;d_stations;name;varchar(50);;-;Descriptive / human readable name of the station;
+;production;d_inventory;-;-;;-;Dimension table. Provides an overview, which KPIs are available from which station for which time interval;
+Physical Location;production;d_inventory;station_id;varchar;;value required, part of primary key;Unique identifier for weather station (see production.d_stations);production.d_stations
+Data Source;production;d_inventory;source;varchar;openaq', 'noaa';value required;Identifier for data source.;
+Data Source;production;d_inventory;common_kpi_name;varchar;values from d_kpi_names.common_kpi_names;value required, part of primary key;Name of climate KPI as defined in production.d_kpi_names;production.d_kpi_names
+Data Source;production;d_inventory;common_unit;varchar;values from d_kpi_names.common_unit;value required, part of primary key;Name of measurement unit as defined in production.d_kpi_names;production.d_kpi_names
+Data Source;production;d_inventory;from_year;int;;-;Year of first data available for the combination of kpi, unit and station;
+Data Source;production;d_inventory;until_year;int;;-;Last year for which data is available for the combination of kpi, unit and station;
+;production;d_countries;-;-;-;-;Lookup table for harmonized country Ids;
+Physical Location;production;d_countries;country_id;varchar(2);;value required, part of primary key;2-character ID for countries, harmonized over the data sourced;
+Physical Location;production;d_countries;country;varchar;;value required;Long country name as used in the data sources;
+Data Source;production;d_countries;source;varchar;openaq', 'noaa';value required, part of primary key;Identifier for data source.;
+;production;d_kpi_names;-;-;-;-;Lookup table for harmonization of all kpi names and units across the data sources;
+Measurement;production;d_kpi_names;orig_kpi_name;varchar(16);;value required, part of primary key;Name of KPI in the source data;
+Measurement;production;d_kpi_names;orig_unit;varchar(8);;value required, part of primary key;Unit of the measurement in the source data;
+Measurement;production;d_kpi_names;common_kpi_name;varchar(16);;-;Harmonized name of the KPI;
+Measurement;production;d_kpi_names;common_unit;varchar(8);;-;Harmonized unit of measurement;
+Data Source;production;d_kpi_names;source;varchar;openaq', 'noaa';value required, part of primary key;Identifier for data source.;
+Measurement;production;d_kpi_names;description;text;;-;Description of KPI, its unit and - if necessary - the transformation from original kpi+unit into common kpi+unit;
